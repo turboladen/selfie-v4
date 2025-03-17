@@ -3,27 +3,33 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
-/// Selfie - A package manager and dotfile manager
+/// Selfie - A personal package manager
+///
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 pub struct ClapCli {
     /// Override the environment from config
+    ///
     #[clap(long, short = 'e', global = true)]
     pub(crate) environment: Option<String>,
 
     /// Override the package directory from config
+    ///
     #[clap(long, short = 'p', global = true)]
     pub(crate) package_directory: Option<PathBuf>,
 
     /// Show detailed output
-    #[clap(long, short = 'v', global = true)]
+    ///
+    #[clap(long, short = 'v', global = true, default_value_t = false)]
     pub(crate) verbose: bool,
 
-    /// Disable colored output
-    #[clap(long, global = true)]
+    /// Enable colored output
+    ///
+    #[clap(long, global = true, default_value_t = false)]
     pub(crate) no_color: bool,
 
     /// Subcommand to execute
+    ///
     #[clap(subcommand)]
     pub(crate) command: ClapCommands,
 }
@@ -31,10 +37,12 @@ pub struct ClapCli {
 // Clap-specific command structure definitions here...
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum ClapCommands {
-    /// Package management commands
+    /// Selfie: package management commands
+    ///
     Package(PackageCommands),
 
-    /// Configuration management commands
+    /// Selfie: configuration management commands
+    ///
     Config(ConfigCommands),
 }
 

@@ -1,10 +1,34 @@
 mod cli;
+mod config;
 
 use clap::Parser;
-use cli::ClapCli;
+use selfie::{
+    adapters::{config_loader, filesystem::RealFileSystem},
+    ports::config_loader::{ApplyToConfg, ConfigLoader},
+};
+use tracing::debug;
 
-fn main() {
+use crate::cli::ClapCli;
+
+fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
+
     let args = ClapCli::parse();
-    dbg!(&args);
-    todo!()
+    debug!("CLI arguments: {:#?}", &args);
+
+    let fs = RealFileSystem;
+
+    let config = {
+        // 1. Load config.yaml
+        let config = config_loader::Yaml::new(&fs).load_config()?;
+
+        // 2. Apply CLI args to config (overriding)
+        args.apply_to_config(config)
+    };
+
+    debug!("Final config: {:#?}", &config);
+
+    // 3. Run command
+
+    Ok(())
 }
