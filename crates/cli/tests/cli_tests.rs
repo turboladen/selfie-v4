@@ -2,6 +2,43 @@
 
 use assert_cmd::Command;
 use predicates::prelude::*;
+use std::{fs, io::Write};
+use tempfile::TempDir;
+
+// Helper to create a temporary config environment
+fn setup_test_config() -> TempDir {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_dir = temp_dir.path().join(".config").join("selfie");
+    fs::create_dir_all(&config_dir).unwrap();
+
+    let config_path = config_dir.join("config.yaml");
+    let mut config_file = fs::File::create(&config_path).unwrap();
+
+    // Write minimal valid config
+    writeln!(config_file, "environment: test-env").unwrap();
+    writeln!(
+        config_file,
+        "package_directory: {}",
+        temp_dir.path().join("packages").display()
+    )
+    .unwrap();
+
+    temp_dir
+}
+
+// Helper function to get a command instance with environment variables pointing to our test config
+fn get_command_with_test_config(temp_dir: &TempDir) -> Command {
+    let mut cmd = Command::cargo_bin("selfie-cli").unwrap();
+
+    // Override the config directory location
+    // This assumes we can add a CLI flag or env var to override the config directory
+    cmd.env(
+        "SELFIE_CONFIG_DIR",
+        temp_dir.path().join(".config").join("selfie"),
+    );
+
+    cmd
+}
 
 // Helper function to get a command instance
 fn get_command() -> Command {
@@ -70,7 +107,8 @@ fn test_cli_verbose_flag() {
 
 #[test]
 fn test_cli_no_color() {
-    let mut cmd = get_command();
+    let temp_dir = setup_test_config();
+    let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["--no-color", "config", "validate"]);
     cmd.assert().success();
 }
@@ -80,49 +118,56 @@ fn test_cli_no_color() {
 
 #[test]
 fn test_cli_config_validate() {
-    let mut cmd = get_command();
+    let temp_dir = setup_test_config();
+    let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["config", "validate"]);
     cmd.assert().success();
 }
 
 #[test]
 fn test_cli_package_list() {
-    let mut cmd = get_command();
+    let temp_dir = setup_test_config();
+    let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["package", "list"]);
     cmd.assert().success();
 }
 
 #[test]
 fn test_cli_package_info() {
-    let mut cmd = get_command();
+    let temp_dir = setup_test_config();
+    let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["package", "info", "test-package"]);
     cmd.assert().success();
 }
 
 #[test]
 fn test_cli_package_install() {
-    let mut cmd = get_command();
+    let temp_dir = setup_test_config();
+    let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["package", "install", "test-package"]);
     cmd.assert().success();
 }
 
 #[test]
 fn test_cli_package_create() {
-    let mut cmd = get_command();
+    let temp_dir = setup_test_config();
+    let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["package", "create", "test-package"]);
     cmd.assert().success();
 }
 
 #[test]
 fn test_cli_package_validate() {
-    let mut cmd = get_command();
+    let temp_dir = setup_test_config();
+    let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["package", "validate", "test-package"]);
     cmd.assert().success();
 }
 
 #[test]
 fn test_cli_package_validate_with_path() {
-    let mut cmd = get_command();
+    let temp_dir = setup_test_config();
+    let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args([
         "package",
         "validate",

@@ -6,12 +6,12 @@ impl ApplyToConfg for ClapCli {
     fn apply_to_config(&self, mut config: AppConfig) -> AppConfig {
         // Override environment if specified
         if let Some(env) = self.environment.as_ref() {
-            *config.environment_mut() = env.clone();
+            config.environment_mut().clone_from(env)
         }
 
         // Override package directory if specified
         if let Some(dir) = self.package_directory.as_ref() {
-            *config.package_directory_mut() = dir.clone();
+            config.package_directory_mut().clone_from(dir)
         }
 
         // Apply UI settings

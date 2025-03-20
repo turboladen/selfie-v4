@@ -51,30 +51,37 @@ fn default_use_colors() -> bool {
 }
 
 impl AppConfig {
+    #[must_use]
     pub fn environment(&self) -> &str {
         &self.environment
     }
 
+    #[must_use]
     pub fn package_directory(&self) -> &PathBuf {
         &self.package_directory
     }
 
+    #[must_use]
     pub fn verbose(&self) -> bool {
         self.verbose
     }
 
+    #[must_use]
     pub fn use_colors(&self) -> bool {
         self.use_colors
     }
 
+    #[must_use]
     pub fn command_timeout(&self) -> Duration {
         Duration::from_secs(self.command_timeout.into())
     }
 
+    #[must_use]
     pub fn max_parallel(&self) -> NonZeroUsize {
         self.max_parallel_installations
     }
 
+    #[must_use]
     pub fn stop_on_error(&self) -> bool {
         self.stop_on_error
     }
@@ -96,7 +103,7 @@ impl AppConfig {
     }
 }
 
-/// Builder pattern for AppConfig testing
+/// Builder pattern for `AppConfig` testing
 ///
 #[derive(Default, Debug)]
 pub struct AppConfigBuilder {
@@ -110,11 +117,13 @@ pub struct AppConfigBuilder {
 }
 
 impl AppConfigBuilder {
+    #[must_use]
     pub fn environment(mut self, environment: &str) -> Self {
         self.environment = environment.to_string();
         self
     }
 
+    #[must_use]
     pub fn package_directory<D>(mut self, package_directory: D) -> Self
     where
         D: AsRef<std::ffi::OsStr>,
@@ -123,31 +132,37 @@ impl AppConfigBuilder {
         self
     }
 
+    #[must_use]
     pub fn verbose(mut self, verbose: bool) -> Self {
         self.verbose = Some(verbose);
         self
     }
 
+    #[must_use]
     pub fn use_colors(mut self, use_colors: bool) -> Self {
         self.use_colors = Some(use_colors);
         self
     }
 
+    #[must_use]
     pub fn command_timeout_unchecked(mut self, timeout: u64) -> Self {
         self.command_timeout = Some(NonZeroU64::new(timeout).unwrap());
         self
     }
 
+    #[must_use]
     pub fn max_parallel_unchecked(mut self, max: usize) -> Self {
         self.max_parallel = Some(NonZeroUsize::new(max).unwrap());
         self
     }
 
+    #[must_use]
     pub fn stop_on_error(mut self, stop: bool) -> Self {
         self.stop_on_error = Some(stop);
         self
     }
 
+    #[must_use]
     pub fn build(self) -> AppConfig {
         AppConfig {
             environment: self.environment,

@@ -25,7 +25,7 @@
 
 - [x] Add YAML config file loader
 - [x] Merge CLI flags with config file for runtime use
-- [ ] Add command runner port and shell command adapter
+- [x] Add command runner port and shell command adapter
 - [ ] Add running `config validate`
 
 ### Phase 3: Package Basics

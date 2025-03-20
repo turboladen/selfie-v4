@@ -46,6 +46,11 @@ impl FileSystem for RealFileSystem {
     }
 
     fn config_dir(&self) -> Result<PathBuf, FileSystemError> {
+        // Check for environment variable override first
+        if let Ok(dir) = std::env::var("SELFIE_CONFIG_DIR") {
+            return Ok(PathBuf::from(dir));
+        }
+
         choose_app_strategy(AppStrategyArgs {
             top_level_domain: "net".to_string(),
             author: "turboladen".to_string(),
