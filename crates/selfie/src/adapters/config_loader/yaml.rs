@@ -5,10 +5,8 @@ use config::FileFormat;
 
 use crate::{
     domain::config::AppConfig,
-    ports::{
-        config_loader::{ConfigLoadError, ConfigLoader},
-        filesystem::FileSystem,
-    },
+    filesystem::port::FileSystem,
+    ports::config_loader::{ConfigLoadError, ConfigLoader},
 };
 
 pub struct Yaml<'a, F: FileSystem> {
@@ -87,7 +85,7 @@ impl<F: FileSystem> ConfigLoader for Yaml<'_, F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ports::filesystem::{FileSystemError, MockFileSystem};
+    use crate::filesystem::port::{FileSystemError, MockFileSystem};
     use std::path::Path;
 
     fn setup_test_fs() -> (MockFileSystem, PathBuf) {

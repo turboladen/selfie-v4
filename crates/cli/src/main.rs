@@ -3,7 +3,8 @@ mod config;
 
 use clap::Parser;
 use selfie::{
-    adapters::{config_loader, filesystem::RealFileSystem},
+    adapters::config_loader,
+    filesystem::adapter::RealFileSystem,
     ports::config_loader::{ApplyToConfg, ConfigLoader},
 };
 use tracing::debug;
