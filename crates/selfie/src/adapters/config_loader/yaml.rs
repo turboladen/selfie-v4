@@ -4,9 +4,11 @@ use std::path::PathBuf;
 use config::FileFormat;
 
 use crate::{
-    config::AppConfig,
+    config::{
+        AppConfig,
+        ports::{ConfigLoadError, ConfigLoader},
+    },
     filesystem::port::FileSystem,
-    ports::config_loader::{ConfigLoadError, ConfigLoader},
 };
 
 pub struct Yaml<'a, F: FileSystem> {

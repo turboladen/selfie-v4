@@ -1,3 +1,5 @@
+pub mod ports;
+
 use std::{
     num::{NonZeroU64, NonZeroUsize},
     path::PathBuf,
