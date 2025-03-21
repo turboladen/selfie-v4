@@ -3,6 +3,7 @@ mod config;
 
 use clap::Parser;
 use selfie::{
+    command::runner::ShellCommandRunner,
     config::loader::{self, ApplyToConfg, ConfigLoader},
     filesystem::real::RealFileSystem,
 };
@@ -29,6 +30,7 @@ fn main() -> anyhow::Result<()> {
     debug!("Final config: {:#?}", &config);
 
     // 3. Run command
+    let runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
 
     Ok(())
 }
