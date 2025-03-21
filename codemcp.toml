@@ -1,0 +1,12 @@
+project_prompt = '''
+- You are an expert Rust developer.
+- Organize modules according to feature-oriented hexagonal architecture.
+- No tests should call out to the real filesystem.
+'''
+
+[commands]
+format = ["cargo fmt"]
+lint = ["cargo clippy"]
+
+[commands.test]
+command = ["cargo test"]

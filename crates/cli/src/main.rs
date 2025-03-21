@@ -1,4 +1,5 @@
 mod cli;
+mod commands;
 mod config;
 
 use clap::Parser;
@@ -9,7 +10,7 @@ use selfie::{
 };
 use tracing::debug;
 
-use crate::cli::ClapCli;
+use crate::{cli::ClapCli, commands::dispatch_command};
 
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
@@ -29,8 +30,12 @@ fn main() -> anyhow::Result<()> {
 
     debug!("Final config: {:#?}", &config);
 
-    // 3. Run command
+    // 3. Create command runner for use by commands that need to execute external programs
     let runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
+    // TODO: Pass runner to commands that need it
+
+    // 4. Dispatch and execute the requested command
+    dispatch_command(&args.command, &config)?;
 
     Ok(())
 }
