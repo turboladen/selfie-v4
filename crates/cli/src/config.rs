@@ -1,4 +1,4 @@
-use selfie::config::{AppConfig, ports::ApplyToConfg};
+use selfie::config::{AppConfig, loader::ApplyToConfg};
 
 use crate::cli::ClapCli;
 

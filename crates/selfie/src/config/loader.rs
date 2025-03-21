@@ -1,8 +1,12 @@
+pub mod yaml;
+
+pub use self::yaml::Yaml;
+
 use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::{config::AppConfig, filesystem::port::FileSystemError};
+use crate::{config::AppConfig, filesystem::FileSystemError};
 
 /// Port for loading configuration from disk
 ///
