@@ -1,4 +1,3 @@
-// src/adapters/command/shell.rs
 // Shell command runner adapter implementation
 
 use std::{
@@ -8,23 +7,26 @@ use std::{
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
-use tokio::sync::mpsc;
-use tokio::{io::AsyncReadExt, process::Command};
+use tokio::{io::AsyncReadExt, process::Command, sync::mpsc};
 
-use crate::ports::command_runner::{CommandError, CommandOutput, CommandRunner, OutputChunk};
+use super::{CommandError, CommandOutput, CommandRunner, OutputChunk};
 
 /// Shell command runner implementation
+///
 #[derive(Clone)]
 pub struct ShellCommandRunner {
     /// Path to the shell executable
+    ///
     shell: String,
 
     /// Default timeout for commands
+    ///
     default_timeout: Duration,
 }
 
 impl ShellCommandRunner {
     /// Create a new shell command runner
+    ///
     #[must_use]
     pub fn new(shell: &str, default_timeout: Duration) -> Self {
         Self {
