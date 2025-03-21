@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use config::FileFormat;
 
 use crate::{
-    domain::config::AppConfig,
+    config::AppConfig,
     filesystem::port::FileSystem,
     ports::config_loader::{ConfigLoadError, ConfigLoader},
 };

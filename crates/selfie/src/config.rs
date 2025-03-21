@@ -1,5 +1,3 @@
-// src/domain/config.rs
-
 use std::{
     num::{NonZeroU64, NonZeroUsize},
     path::PathBuf,
