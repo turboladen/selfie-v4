@@ -8,7 +8,7 @@ use std::{
 
 use etcetera::{AppStrategy, AppStrategyArgs, choose_app_strategy};
 
-use crate::ports::filesystem::{FileSystem, FileSystemError};
+use super::{FileSystem, FileSystemError};
 
 /// Real file system implementation
 pub struct RealFileSystem;

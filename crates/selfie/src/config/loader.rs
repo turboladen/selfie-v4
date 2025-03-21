@@ -1,12 +1,12 @@
-// src/ports/config_loader.rs
+pub mod yaml;
+
+pub use self::yaml::Yaml;
 
 use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::domain::config::AppConfig;
-
-use super::filesystem::FileSystemError;
+use crate::{config::AppConfig, filesystem::FileSystemError};
 
 /// Port for loading configuration from disk
 ///

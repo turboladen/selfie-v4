@@ -1,4 +1,4 @@
-use selfie::{domain::config::AppConfig, ports::config_loader::ApplyToConfg};
+use selfie::config::{AppConfig, loader::ApplyToConfg};
 
 use crate::cli::ClapCli;
 
@@ -26,7 +26,7 @@ impl ApplyToConfg for ClapCli {
 mod tests {
     use super::*;
     use clap::Parser;
-    use selfie::domain::config::AppConfigBuilder;
+    use selfie::config::AppConfigBuilder;
     use std::path::PathBuf;
 
     // Helper to create CLI args

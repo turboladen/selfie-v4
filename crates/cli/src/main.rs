@@ -3,8 +3,8 @@ mod config;
 
 use clap::Parser;
 use selfie::{
-    adapters::{config_loader, filesystem::RealFileSystem},
-    ports::config_loader::{ApplyToConfg, ConfigLoader},
+    config::loader::{self, ApplyToConfg, ConfigLoader},
+    filesystem::real::RealFileSystem,
 };
 use tracing::debug;
 
@@ -20,7 +20,7 @@ fn main() -> anyhow::Result<()> {
 
     let config = {
         // 1. Load config.yaml
-        let config = config_loader::Yaml::new(&fs).load_config()?;
+        let config = loader::Yaml::new(&fs).load_config()?;
 
         // 2. Apply CLI args to config (overriding)
         args.apply_to_config(config)

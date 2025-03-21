@@ -1,15 +1,10 @@
-// src/adapters/config/config_loader/yaml.rs
 use std::path::PathBuf;
 
 use config::FileFormat;
 
-use crate::{
-    domain::config::AppConfig,
-    ports::{
-        config_loader::{ConfigLoadError, ConfigLoader},
-        filesystem::FileSystem,
-    },
-};
+use crate::{config::AppConfig, filesystem::FileSystem};
+
+use super::{ConfigLoadError, ConfigLoader};
 
 pub struct Yaml<'a, F: FileSystem> {
     fs: &'a F,
@@ -87,7 +82,7 @@ impl<F: FileSystem> ConfigLoader for Yaml<'_, F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ports::filesystem::{FileSystemError, MockFileSystem};
+    use crate::filesystem::{FileSystemError, MockFileSystem};
     use std::path::Path;
 
     fn setup_test_fs() -> (MockFileSystem, PathBuf) {
