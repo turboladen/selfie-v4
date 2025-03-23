@@ -1,4 +1,7 @@
 pub mod loader;
+pub mod yaml;
+
+pub use self::yaml::YamlLoader;
 
 use std::{
     num::{NonZeroU64, NonZeroUsize},

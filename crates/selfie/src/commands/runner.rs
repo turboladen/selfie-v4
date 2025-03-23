@@ -1,7 +1,3 @@
-pub mod shell;
-
-pub use self::shell::ShellCommandRunner;
-
 use std::{borrow::Cow, fmt, process::Output, time::Duration};
 
 use async_trait::async_trait;

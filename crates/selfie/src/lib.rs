@@ -1,3 +1,3 @@
-pub mod command;
+pub mod commands;
 pub mod config;
-pub mod filesystem;
+pub mod fs;
