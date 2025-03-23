@@ -10,6 +10,7 @@ use selfie::{
         loader::{ApplyToConfg, ConfigLoader},
     },
     fs::real::RealFileSystem,
+    progress_reporter::terminal::TerminalProgressReporter,
 };
 use tracing::debug;
 
@@ -35,10 +36,11 @@ fn main() -> anyhow::Result<()> {
 
     // 3. Create command runner for use by commands that need to execute external programs
     let runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
+    let reporter = TerminalProgressReporter::new(config.use_colors());
     // TODO: Pass runner to commands that need it
 
     // 4. Dispatch and execute the requested command
-    dispatch_command(&args.command, &config)?;
+    dispatch_command(&args.command, &config, reporter)?;
 
     Ok(())
 }
