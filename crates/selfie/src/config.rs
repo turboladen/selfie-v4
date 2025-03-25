@@ -5,11 +5,12 @@ pub use self::yaml::YamlLoader;
 
 use std::{
     num::{NonZeroU64, NonZeroUsize},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::Duration,
 };
 
 use serde::Deserialize;
+use thiserror::Error;
 
 const VERBOSE_DEFAULT: bool = false;
 const USE_COLORS_DEFAULT: bool = true;
@@ -80,7 +81,7 @@ impl AppConfig {
     }
 
     #[must_use]
-    pub fn max_parallel(&self) -> NonZeroUsize {
+    pub fn max_parallel_installations(&self) -> NonZeroUsize {
         self.max_parallel_installations
     }
 
@@ -104,6 +105,58 @@ impl AppConfig {
     pub fn use_colors_mut(&mut self) -> &mut bool {
         &mut self.use_colors
     }
+
+    /// Full validation for the AppConfig
+    ///
+    pub fn validate<F>(&self, report_fn: F) -> Result<(), ConfigValidationError>
+    where
+        F: Fn(&str),
+    {
+        validate_environment(&self.environment)?;
+        report_fn("`environment` is valid");
+        validate_package_directory(&self.package_directory)?;
+        report_fn("`package_directory` is valid");
+
+        Ok(())
+    }
+}
+
+#[derive(Error, Debug, PartialEq)]
+pub enum ConfigValidationError {
+    #[error("Empty field: {0}")]
+    EmptyField(String),
+
+    #[error("Invalid package directory: {0}")]
+    InvalidPackageDirectory(String),
+}
+
+fn validate_environment(environment: &str) -> Result<(), ConfigValidationError> {
+    if environment.is_empty() {
+        Err(ConfigValidationError::EmptyField("environment".to_string()))
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_package_directory(package_directory: &Path) -> Result<(), ConfigValidationError> {
+    if package_directory.as_os_str().is_empty() {
+        return Err(ConfigValidationError::EmptyField(
+            "package_directory".to_string(),
+        ));
+    }
+
+    // Validate the package directory path
+    let package_dir = package_directory.to_string_lossy();
+    let expanded_path = shellexpand::tilde(&package_dir);
+    let expanded_path = Path::new(expanded_path.as_ref());
+
+    if !expanded_path.is_absolute() {
+        return Err(ConfigValidationError::InvalidPackageDirectory(
+            "Package directory must be an absolute path".to_string(),
+        ));
+    }
+
+    Ok(())
 }
 
 /// Builder pattern for `AppConfig` testing
@@ -224,7 +277,7 @@ mod tests {
         assert!(config.verbose());
         assert!(!config.use_colors());
         assert_eq!(config.command_timeout(), Duration::from_secs(120));
-        assert_eq!(config.max_parallel().get(), 8);
+        assert_eq!(config.max_parallel_installations().get(), 8);
         assert!(!config.stop_on_error());
     }
 
@@ -264,7 +317,7 @@ mod tests {
         assert_eq!(config.verbose(), VERBOSE_DEFAULT);
         assert_eq!(config.use_colors(), USE_COLORS_DEFAULT);
         assert_eq!(config.command_timeout().as_secs(), 60);
-        assert!(config.max_parallel().get() > 0); // Should be based on CPUs or default
+        assert!(config.max_parallel_installations().get() > 0); // Should be based on CPUs or default
         assert_eq!(config.stop_on_error(), STOP_ON_ERROR_DEFAULT);
     }
 

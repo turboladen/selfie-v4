@@ -3,6 +3,8 @@ use std::fmt;
 pub trait ProgressReporter {
     fn status_line(&self, message_type: MessageType, message: impl fmt::Display) -> String;
 
+    fn format(&self, message: impl fmt::Display) -> String;
+
     fn format_progress(&self, message: impl fmt::Display) -> String {
         self.status_line(MessageType::Progress, message)
     }
@@ -23,6 +25,7 @@ pub trait ProgressReporter {
         self.status_line(MessageType::Error, message)
     }
 
+    fn report(&self, message: impl fmt::Display);
     fn report_progress(&self, message: impl fmt::Display);
     fn report_success(&self, message: impl fmt::Display);
     fn report_info(&self, message: impl fmt::Display);

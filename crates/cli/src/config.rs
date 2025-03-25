@@ -229,6 +229,6 @@ mod tests {
         // Other settings should be preserved
         assert_eq!(updated.command_timeout().as_secs(), 120);
         assert!(!updated.stop_on_error());
-        assert_eq!(updated.max_parallel().get(), 8);
+        assert_eq!(updated.max_parallel_installations().get(), 8);
     }
 }

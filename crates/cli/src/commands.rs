@@ -1,20 +1,20 @@
 // src/commands.rs
 
 use anyhow::Result;
+use console::style;
 use selfie::{
     config::AppConfig,
     progress_reporter::{port::ProgressReporter, terminal::TerminalProgressReporter},
 };
 use tracing::{debug, info};
 
-use crate::cli::{
-    ClapCommands, ConfigCommands, ConfigSubcommands, PackageCommands, PackageSubcommands,
-};
+use crate::cli::{ClapCommands, ConfigSubcommands, PackageSubcommands};
 
 /// Primary command dispatcher that routes to the appropriate command handler
 pub fn dispatch_command(
     command: &ClapCommands,
     config: &AppConfig,
+    original_config: AppConfig,
     reporter: TerminalProgressReporter,
 ) -> Result<()> {
     debug!("Dispatching command: {:?}", command);
@@ -24,7 +24,7 @@ pub fn dispatch_command(
             dispatch_package_command(&package_cmd.command, config, reporter)
         }
         ClapCommands::Config(config_cmd) => {
-            dispatch_config_command(&config_cmd.command, config, reporter)
+            dispatch_config_command(&config_cmd.command, original_config, reporter)
         }
     }
 }
@@ -58,13 +58,13 @@ fn dispatch_package_command(
 /// Handle configuration management commands
 fn dispatch_config_command(
     command: &ConfigSubcommands,
-    config: &AppConfig,
+    original_config: AppConfig,
     reporter: TerminalProgressReporter,
 ) -> Result<()> {
     debug!("Handling config command: {:?}", command);
 
     match command {
-        ConfigSubcommands::Validate => handle_config_validate(config, reporter),
+        ConfigSubcommands::Validate => handle_config_validate(&original_config, reporter),
     }
 }
 
@@ -149,26 +149,48 @@ fn handle_package_validate(
     Ok(())
 }
 
-fn handle_config_validate(config: &AppConfig, reporter: TerminalProgressReporter) -> Result<()> {
+fn handle_config_validate(
+    original_config: &AppConfig,
+    reporter: TerminalProgressReporter,
+) -> Result<()> {
+    fn report_with_style(
+        reporter: &TerminalProgressReporter,
+        param1: impl std::fmt::Display,
+        param2: impl std::fmt::Display,
+    ) {
+        reporter.report(format!(
+            "  {} {}",
+            style(param1).italic().dim(),
+            style(param2).bold()
+        ));
+    }
     info!("Validating configuration");
 
-    reporter.report_success("Configuration validation successful:");
-    reporter.report_info(format!("  Environment: {}", config.environment()));
-    reporter.report_info(format!(
-        "  Package Directory: {}",
-        config.package_directory().display()
-    ));
-    reporter.report_info(format!(
-        "  Command Timeout: {} seconds",
-        config.command_timeout().as_secs()
-    ));
-    reporter.report_info(format!(
-        "  Max Parallel Installations: {}",
-        config.max_parallel().get()
-    ));
-    reporter.report_info(format!("  Stop On Error: {}", config.stop_on_error()));
-    reporter.report_info(format!("  Verbose Output: {}", config.verbose()));
-    reporter.report_info(format!("  Color Output: {}", config.use_colors()));
+    match original_config.validate(|msg| reporter.report_info(msg)) {
+        Ok(_) => {
+            reporter.report_success("Configuration validation successful.");
+            report_with_style(&reporter, "environment:", original_config.environment());
+            report_with_style(
+                &reporter,
+                "package_directory:",
+                original_config.package_directory().display(),
+            );
+            report_with_style(
+                &reporter,
+                "command_timeout:",
+                format!("{} seconds", original_config.command_timeout().as_secs()),
+            );
+            report_with_style(
+                &reporter,
+                "max_parallel_installations:",
+                original_config.max_parallel_installations().get(),
+            );
+            report_with_style(&reporter, "stop_on_error:", original_config.stop_on_error());
+            report_with_style(&reporter, "verbose:", original_config.verbose());
+            report_with_style(&reporter, "use_colors:", original_config.use_colors());
+        }
+        Err(_) => todo!(),
+    }
 
     Ok(())
 }

@@ -51,6 +51,14 @@ impl ProgressReporter for TerminalProgressReporter {
         format!("{}{}", prefix, formatted_message)
     }
 
+    fn format(&self, message: impl std::fmt::Display) -> String {
+        message.to_string()
+    }
+
+    fn report(&self, message: impl std::fmt::Display) {
+        println!("{}", self.format(message));
+    }
+
     fn report_progress(&self, message: impl std::fmt::Display) {
         println!("{}", self.format_progress(message));
     }

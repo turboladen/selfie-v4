@@ -24,12 +24,14 @@ fn main() -> anyhow::Result<()> {
 
     let fs = RealFileSystem;
 
-    let config = {
+    // Use `config` for most things; use `original_config` for `config` commands, where we want to
+    // deal strictly with the config file.
+    let (config, original_config) = {
         // 1. Load config.yaml
         let config = YamlLoader::new(&fs).load_config()?;
 
         // 2. Apply CLI args to config (overriding)
-        args.apply_to_config(config)
+        (args.apply_to_config(config.clone()), config)
     };
 
     debug!("Final config: {:#?}", &config);
@@ -40,7 +42,7 @@ fn main() -> anyhow::Result<()> {
     // TODO: Pass runner to commands that need it
 
     // 4. Dispatch and execute the requested command
-    dispatch_command(&args.command, &config, reporter)?;
+    dispatch_command(&args.command, &config, original_config, reporter)?;
 
     Ok(())
 }
