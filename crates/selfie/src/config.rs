@@ -18,6 +18,7 @@ const STOP_ON_ERROR_DEFAULT: bool = true;
 
 /// Comprehensive application configuration that combines file config and CLI args
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppConfig {
     // Core settings
     pub(crate) environment: String,
@@ -378,5 +379,19 @@ mod tests {
         assert_eq!(config.command_timeout.get(), 60); // Default
         assert!(config.max_parallel_installations.get() > 0); // Default based on CPUs
         assert!(config.stop_on_error); // Default
+    }
+
+    #[test]
+    fn test_deny_unknown_fields() {
+        // YAML string with an unknown field `unknown_field`
+        let yaml = r#"
+        environment: "prod"
+        package_directory: "/opt/packages"
+        unknown_field: "this should cause an error"
+    "#;
+
+        // Attempt to deserialize and expect an error
+        let result: Result<AppConfig, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_err());
     }
 }

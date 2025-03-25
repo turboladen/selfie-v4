@@ -217,11 +217,6 @@ mod tests {
             command_timeout: 120
             stop_on_error: false
             max_parallel_installations: 8
-            logging:
-              enabled: true
-              directory: "/test/logs"
-              max_files: 5
-              max_size: 20
         "#;
 
             fs.mock_config_file(config_dir, config_yaml);
