@@ -110,7 +110,7 @@ impl AppConfig {
     ///
     pub fn validate<F>(&self, report_fn: F) -> Result<(), ConfigValidationError>
     where
-        F: Fn(&str),
+        F: Fn(&'static str),
     {
         validate_environment(&self.environment)?;
         report_fn("`environment` is valid");

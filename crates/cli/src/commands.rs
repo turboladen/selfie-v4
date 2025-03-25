@@ -1,21 +1,16 @@
-// src/commands.rs
-
 use anyhow::Result;
 use console::style;
-use selfie::{
-    config::AppConfig,
-    progress_reporter::{port::ProgressReporter, terminal::TerminalProgressReporter},
-};
+use selfie::{config::AppConfig, progress_reporter::port::ProgressReporter};
 use tracing::{debug, info};
 
 use crate::cli::{ClapCommands, ConfigSubcommands, PackageSubcommands};
 
 /// Primary command dispatcher that routes to the appropriate command handler
-pub fn dispatch_command(
+pub fn dispatch_command<R: ProgressReporter>(
     command: &ClapCommands,
     config: &AppConfig,
     original_config: AppConfig,
-    reporter: TerminalProgressReporter,
+    reporter: R,
 ) -> Result<()> {
     debug!("Dispatching command: {:?}", command);
 
@@ -30,10 +25,10 @@ pub fn dispatch_command(
 }
 
 /// Handle package management commands
-fn dispatch_package_command(
+fn dispatch_package_command<R: ProgressReporter>(
     command: &PackageSubcommands,
     config: &AppConfig,
-    reporter: TerminalProgressReporter,
+    reporter: R,
 ) -> Result<()> {
     debug!("Handling package command: {:?}", command);
 
@@ -56,10 +51,10 @@ fn dispatch_package_command(
 }
 
 /// Handle configuration management commands
-fn dispatch_config_command(
+fn dispatch_config_command<R: ProgressReporter>(
     command: &ConfigSubcommands,
     original_config: AppConfig,
-    reporter: TerminalProgressReporter,
+    reporter: R,
 ) -> Result<()> {
     debug!("Handling config command: {:?}", command);
 
@@ -70,10 +65,10 @@ fn dispatch_config_command(
 
 // Command handler implementations
 
-fn handle_package_install(
+fn handle_package_install<R: ProgressReporter>(
     package_name: &str,
     config: &AppConfig,
-    reporter: TerminalProgressReporter,
+    reporter: R,
 ) -> Result<()> {
     info!("Installing package: {}", package_name);
 
@@ -86,7 +81,7 @@ fn handle_package_install(
     Ok(())
 }
 
-fn handle_package_list(config: &AppConfig, reporter: TerminalProgressReporter) -> Result<()> {
+fn handle_package_list<R: ProgressReporter>(config: &AppConfig, reporter: R) -> Result<()> {
     info!(
         "Listing packages from {}",
         config.package_directory().display()
@@ -96,10 +91,10 @@ fn handle_package_list(config: &AppConfig, reporter: TerminalProgressReporter) -
     Ok(())
 }
 
-fn handle_package_info(
+fn handle_package_info<R: ProgressReporter>(
     package_name: &str,
     _config: &AppConfig,
-    reporter: TerminalProgressReporter,
+    reporter: R,
 ) -> Result<()> {
     info!("Getting info for package: {}", package_name);
     // TODO: Implement package info
@@ -110,10 +105,10 @@ fn handle_package_info(
     Ok(())
 }
 
-fn handle_package_create(
+fn handle_package_create<R: ProgressReporter>(
     package_name: &str,
     _config: &AppConfig,
-    reporter: TerminalProgressReporter,
+    reporter: R,
 ) -> Result<()> {
     info!("Creating package: {}", package_name);
     // TODO: Implement package creation
@@ -124,11 +119,11 @@ fn handle_package_create(
     Ok(())
 }
 
-fn handle_package_validate(
+fn handle_package_validate<R: ProgressReporter>(
     package_name: &str,
     package_path: Option<&std::path::PathBuf>,
     config: &AppConfig,
-    reporter: TerminalProgressReporter,
+    reporter: R,
 ) -> Result<()> {
     info!("Validating package: {}", package_name);
 
@@ -149,12 +144,12 @@ fn handle_package_validate(
     Ok(())
 }
 
-fn handle_config_validate(
+fn handle_config_validate<R: ProgressReporter>(
     original_config: &AppConfig,
-    reporter: TerminalProgressReporter,
+    reporter: R,
 ) -> Result<()> {
-    fn report_with_style(
-        reporter: &TerminalProgressReporter,
+    fn report_with_style<S: ProgressReporter>(
+        reporter: &S,
         param1: impl std::fmt::Display,
         param2: impl std::fmt::Display,
     ) {

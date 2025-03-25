@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use console::{Emoji, style};
 
 use crate::progress_reporter::port::MessageType;
@@ -23,10 +25,10 @@ impl TerminalProgressReporter {
 }
 
 impl ProgressReporter for TerminalProgressReporter {
-    fn status_line(
+    fn status_line<T: Display + 'static>(
         &self,
         message_type: super::port::MessageType,
-        message: impl std::fmt::Display,
+        message: T,
     ) -> String {
         let prefix = match message_type {
             MessageType::Progress => PROGRESS_EMOJI,
@@ -51,31 +53,31 @@ impl ProgressReporter for TerminalProgressReporter {
         format!("{}{}", prefix, formatted_message)
     }
 
-    fn format(&self, message: impl std::fmt::Display) -> String {
+    fn format<T: Display + 'static>(&self, message: T) -> String {
         message.to_string()
     }
 
-    fn report(&self, message: impl std::fmt::Display) {
+    fn report<T: Display + 'static>(&self, message: T) {
         println!("{}", self.format(message));
     }
 
-    fn report_progress(&self, message: impl std::fmt::Display) {
+    fn report_progress<T: Display + 'static>(&self, message: T) {
         println!("{}", self.format_progress(message));
     }
 
-    fn report_success(&self, message: impl std::fmt::Display) {
+    fn report_success<T: Display + 'static>(&self, message: T) {
         println!("{}", self.format_success(message));
     }
 
-    fn report_info(&self, message: impl std::fmt::Display) {
+    fn report_info<T: Display + 'static>(&self, message: T) {
         println!("{}", self.format_info(message));
     }
 
-    fn report_warning(&self, message: impl std::fmt::Display) {
+    fn report_warning<T: Display + 'static>(&self, message: T) {
         println!("{}", self.format_warning(message));
     }
 
-    fn report_error(&self, message: impl std::fmt::Display) {
+    fn report_error<T: Display + 'static>(&self, message: T) {
         eprintln!("{}", self.format_error(message));
     }
 }
