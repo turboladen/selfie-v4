@@ -1,4 +1,3 @@
-// src/cli.rs
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};

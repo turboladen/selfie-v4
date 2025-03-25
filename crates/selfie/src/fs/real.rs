@@ -1,4 +1,3 @@
-// src/adapters/filesystem.rs
 // Real file system adapter implementation
 
 use std::{
@@ -8,7 +7,7 @@ use std::{
 
 use etcetera::{AppStrategy, AppStrategyArgs, choose_app_strategy};
 
-use super::{FileSystem, FileSystemError};
+use super::filesystem::{FileSystem, FileSystemError};
 
 /// Real file system implementation
 pub struct RealFileSystem;

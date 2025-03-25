@@ -1,14 +1,20 @@
 mod cli;
+mod commands;
 mod config;
 
 use clap::Parser;
 use selfie::{
-    config::loader::{self, ApplyToConfg, ConfigLoader},
-    filesystem::real::RealFileSystem,
+    commands::ShellCommandRunner,
+    config::{
+        YamlLoader,
+        loader::{ApplyToConfg, ConfigLoader},
+    },
+    fs::real::RealFileSystem,
+    progress_reporter::terminal::TerminalProgressReporter,
 };
 use tracing::debug;
 
-use crate::cli::ClapCli;
+use crate::{cli::ClapCli, commands::dispatch_command};
 
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
@@ -18,17 +24,25 @@ fn main() -> anyhow::Result<()> {
 
     let fs = RealFileSystem;
 
-    let config = {
+    // Use `config` for most things; use `original_config` for `config` commands, where we want to
+    // deal strictly with the config file.
+    let (config, original_config) = {
         // 1. Load config.yaml
-        let config = loader::Yaml::new(&fs).load_config()?;
+        let config = YamlLoader::new(&fs).load_config()?;
 
         // 2. Apply CLI args to config (overriding)
-        args.apply_to_config(config)
+        (args.apply_to_config(config.clone()), config)
     };
 
     debug!("Final config: {:#?}", &config);
 
-    // 3. Run command
+    // 3. Create command runner for use by commands that need to execute external programs
+    let runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
+    let reporter = TerminalProgressReporter::new(config.use_colors());
+    // TODO: Pass runner to commands that need it
+
+    // 4. Dispatch and execute the requested command
+    dispatch_command(&args.command, &config, original_config, reporter)?;
 
     Ok(())
 }

@@ -1,3 +1,4 @@
-pub mod command_runner;
+pub mod commands;
 pub mod config;
-pub mod filesystem;
+pub mod fs;
+pub mod progress_reporter;

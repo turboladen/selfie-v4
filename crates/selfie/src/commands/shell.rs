@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use futures::TryFutureExt;
 use tokio::{io::AsyncReadExt, process::Command, sync::mpsc};
 
-use super::{CommandError, CommandOutput, CommandRunner, OutputChunk};
+use super::runner::{CommandError, CommandOutput, CommandRunner, OutputChunk};
 
 /// Shell command runner implementation
 ///

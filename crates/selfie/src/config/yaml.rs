@@ -2,21 +2,21 @@ use std::path::PathBuf;
 
 use config::FileFormat;
 
-use crate::{config::AppConfig, filesystem::FileSystem};
+use crate::{config::AppConfig, fs::FileSystem};
 
-use super::{ConfigLoadError, ConfigLoader};
+use super::loader::{ConfigLoadError, ConfigLoader};
 
-pub struct Yaml<'a, F: FileSystem> {
+pub struct YamlLoader<'a, F: FileSystem> {
     fs: &'a F,
 }
 
-impl<'a, F: FileSystem> Yaml<'a, F> {
+impl<'a, F: FileSystem> YamlLoader<'a, F> {
     pub fn new(fs: &'a F) -> Self {
         Self { fs }
     }
 }
 
-impl<F: FileSystem> ConfigLoader for Yaml<'_, F> {
+impl<F: FileSystem> ConfigLoader for YamlLoader<'_, F> {
     fn load_config(&self) -> Result<AppConfig, ConfigLoadError> {
         let config_paths = match self.find_config_file_paths() {
             Ok(paths) => paths,
@@ -82,7 +82,7 @@ impl<F: FileSystem> ConfigLoader for Yaml<'_, F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::filesystem::{FileSystemError, MockFileSystem};
+    use crate::fs::filesystem::{FileSystemError, MockFileSystem};
     use std::path::Path;
 
     fn setup_test_fs() -> (MockFileSystem, PathBuf) {
@@ -117,7 +117,7 @@ mod tests {
             fs.mock_config_dir_ok(&config_dir);
             fs.mock_path_exists(config_dir.join("selfie").join("config.yaml"), true);
 
-            let loader = Yaml::new(&fs);
+            let loader = YamlLoader::new(&fs);
 
             let paths = loader.find_config_file_paths().unwrap();
 
@@ -139,7 +139,7 @@ mod tests {
             fs.mock_path_exists(&yaml_path, true);
             fs.mock_path_exists(&yml_path, true);
 
-            let loader = Yaml::new(&fs);
+            let loader = YamlLoader::new(&fs);
             let paths = loader.find_config_file_paths().unwrap();
 
             // Should find both files
@@ -156,7 +156,7 @@ mod tests {
             fs.expect_config_dir()
                 .return_once(|| Err(FileSystemError::HomeDirNotFound));
 
-            let loader = Yaml::new(&fs);
+            let loader = YamlLoader::new(&fs);
             let paths = loader.find_config_file_paths().unwrap();
 
             // Should return empty vector when config dir can't be found
@@ -178,7 +178,7 @@ mod tests {
             fs.mock_path_exists(&package_dir, true);
             fs.mock_expand_path(&package_dir, &package_dir);
 
-            let loader = Yaml::new(&fs);
+            let loader = YamlLoader::new(&fs);
             let config = loader.load_config().unwrap();
 
             // Check the loaded values
@@ -195,7 +195,7 @@ mod tests {
             fs.mock_path_exists(config_dir.join("config.yaml"), false);
             fs.mock_path_exists(config_dir.join("config.yml"), false);
 
-            let loader = Yaml::new(&fs);
+            let loader = YamlLoader::new(&fs);
 
             // Should return error
             let result = loader.load_config();
@@ -217,17 +217,12 @@ mod tests {
             command_timeout: 120
             stop_on_error: false
             max_parallel_installations: 8
-            logging:
-              enabled: true
-              directory: "/test/logs"
-              max_files: 5
-              max_size: 20
         "#;
 
             fs.mock_config_file(config_dir, config_yaml);
             fs.mock_expand_path("/test/packages", "/test/packages");
 
-            let loader = Yaml::new(&fs);
+            let loader = YamlLoader::new(&fs);
             let config = loader.load_config().unwrap();
 
             // Check basic settings
@@ -254,7 +249,7 @@ mod tests {
 
             fs.mock_config_file(config_dir, invalid_yaml);
 
-            let loader = Yaml::new(&fs);
+            let loader = YamlLoader::new(&fs);
             let result = loader.load_config();
 
             assert!(result.is_err());
@@ -281,7 +276,7 @@ mod tests {
 
             fs.mock_config_file(config_dir, incomplete_yaml);
 
-            let loader = Yaml::new(&fs);
+            let loader = YamlLoader::new(&fs);
             let result = loader.load_config();
 
             assert!(result.is_err());
@@ -309,7 +304,7 @@ mod tests {
 
             fs.mock_config_file(config_dir, invalid_types_yaml);
 
-            let loader = Yaml::new(&fs);
+            let loader = YamlLoader::new(&fs);
             let result = loader.load_config();
 
             assert!(result.is_err());
@@ -332,7 +327,7 @@ mod tests {
             fs.mock_config_file(config_dir, tilde_yaml);
             fs.mock_expand_path(Path::new("~/packages"), &expanded_path);
 
-            let loader = Yaml::new(&fs);
+            let loader = YamlLoader::new(&fs);
             let config = loader.load_config().unwrap();
 
             assert_eq!(config.package_directory, expanded_path);
@@ -357,7 +352,7 @@ mod tests {
             fs.mock_read_file(&config_path, minimal_yaml);
             fs.mock_expand_path(Path::new("/test/packages"), Path::new("/test/packages"));
 
-            let loader = Yaml::new(&fs);
+            let loader = YamlLoader::new(&fs);
             let config = loader.load_config().unwrap();
 
             // Check defaults were properly applied
@@ -387,7 +382,7 @@ mod tests {
             fs.mock_path_exists(&yaml_path, true);
             fs.mock_path_exists(&yml_path, true);
 
-            let loader = Yaml::new(&fs);
+            let loader = YamlLoader::new(&fs);
             let err = loader.load_config();
 
             // Should find both files

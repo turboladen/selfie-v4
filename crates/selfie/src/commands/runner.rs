@@ -1,5 +1,3 @@
-pub mod shell;
-
 use std::{borrow::Cow, fmt, process::Output, time::Duration};
 
 use async_trait::async_trait;
