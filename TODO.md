@@ -30,6 +30,7 @@
 
 ### Phase 3: Package Basics
 
+- [x] Add package domain
 - [ ] Add YAML package file loader
 - [ ] Add running `package validate [name]`
 - [ ] Add running `package info [name]`
