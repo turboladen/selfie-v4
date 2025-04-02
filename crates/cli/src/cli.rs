@@ -78,10 +78,6 @@ pub(crate) enum PackageSubcommands {
     Validate {
         /// Name of the package to validate
         package_name: String,
-
-        /// Package file path (optional)
-        #[clap(long)]
-        package_path: Option<PathBuf>,
     },
 }
 

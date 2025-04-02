@@ -109,6 +109,8 @@ impl AppConfig {
 
     /// Full validation for the AppConfig
     ///
+    // TODO: Convert to use `crate::validation`.
+    //
     pub fn validate<F>(&self, report_fn: F) -> Result<(), ConfigValidationError>
     where
         F: Fn(&'static str),

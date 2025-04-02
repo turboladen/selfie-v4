@@ -1,5 +1,9 @@
-#[cfg(test)]
 mod builder;
+pub mod port;
+pub mod repository;
+pub mod validate;
+
+pub use self::builder::PackageBuilder;
 
 // Core package entity and related types
 use std::{collections::HashMap, path::PathBuf};
@@ -9,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// Core package entity representing a package definition
 ///
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub(crate) struct Package {
+pub struct Package {
     /// Package name
     pub(crate) name: String,
 
@@ -35,7 +39,7 @@ pub(crate) struct Package {
 
 /// Configuration for a specific environment
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub(crate) struct EnvironmentConfig {
+pub struct EnvironmentConfig {
     /// Command to install the package
     pub(crate) install: String,
 
@@ -49,9 +53,8 @@ pub(crate) struct EnvironmentConfig {
 }
 
 impl Package {
-    /// Create a new package with the specified attributes
-    #[cfg(test)]
-    pub(crate) fn new(
+    /// Create a new package with the specified attributes. See `PackageBuilder`.
+    pub fn new(
         name: String,
         version: String,
         homepage: Option<String>,
@@ -68,6 +71,30 @@ impl Package {
             path,
         }
     }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    pub fn homepage(&self) -> Option<&String> {
+        self.homepage.as_ref()
+    }
+
+    pub fn description(&self) -> Option<&String> {
+        self.description.as_ref()
+    }
+
+    pub fn environments(&self) -> &HashMap<String, EnvironmentConfig> {
+        &self.environments
+    }
+
+    pub fn path(&self) -> &PathBuf {
+        &self.path
+    }
 }
 
 #[cfg(test)]
@@ -81,7 +108,7 @@ mod tests {
         let package = PackageBuilder::default()
             .name("test-package")
             .version("1.0.0")
-            .environment("test-env", "test install")
+            .environment("test-env", |b| b.install("test install"))
             .build();
 
         assert_eq!(package.name, "test-package");
@@ -100,7 +127,7 @@ mod tests {
             .version("1.0.0")
             .homepage("https://example.com")
             .description("Test package description")
-            .environment("test-env", "test install")
+            .environment("test-env", |b| b.install("test install"))
             .build();
 
         assert_eq!(package.name, "test-package");

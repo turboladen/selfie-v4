@@ -2,8 +2,11 @@
 
 use assert_cmd::Command;
 use predicates::prelude::*;
+use selfie::package::{Package, PackageBuilder};
 use std::{fs, io::Write};
 use tempfile::TempDir;
+
+const SELFIE_ENV: &str = "test-env";
 
 // Helper to create a temporary config environment
 fn setup_test_config() -> TempDir {
@@ -15,7 +18,7 @@ fn setup_test_config() -> TempDir {
     let mut config_file = fs::File::create(&config_path).unwrap();
 
     // Write minimal valid config
-    writeln!(config_file, "environment: test-env").unwrap();
+    writeln!(config_file, "environment: {SELFIE_ENV}").unwrap();
     writeln!(
         config_file,
         "package_directory: {}",
@@ -24,6 +27,16 @@ fn setup_test_config() -> TempDir {
     .unwrap();
 
     temp_dir
+}
+
+fn add_package(base_dir: &TempDir, package: &Package) {
+    let yaml = serde_yaml::to_string(package).unwrap();
+    dbg!(&yaml);
+    let packages_path = base_dir.path().join("packages");
+    fs::create_dir_all(&packages_path).unwrap();
+    let package_path = packages_path.join(format!("{}.yaml", package.name()));
+
+    fs::write(package_path, yaml).unwrap();
 }
 
 // Helper function to get a command instance with environment variables pointing to our test config
@@ -86,7 +99,7 @@ fn test_cli_missing_required_arg() {
 fn test_cli_with_environment() {
     let mut cmd = get_command();
     // Just test that the arg is accepted, not that it does anything yet
-    cmd.args(["-e", "test-env", "help"]);
+    cmd.args(["-e", SELFIE_ENV, "help"]);
     cmd.assert().success();
 }
 
@@ -159,21 +172,15 @@ fn test_cli_package_create() {
 #[test]
 fn test_cli_package_validate() {
     let temp_dir = setup_test_config();
+
+    let package = PackageBuilder::default()
+        .name("test-package")
+        .version("0.1.0")
+        .environment(SELFIE_ENV, |builder| builder.install("echo 'hi'"))
+        .build();
+
+    add_package(&temp_dir, &package);
     let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["package", "validate", "test-package"]);
-    cmd.assert().success();
-}
-
-#[test]
-fn test_cli_package_validate_with_path() {
-    let temp_dir = setup_test_config();
-    let mut cmd = get_command_with_test_config(&temp_dir);
-    cmd.args([
-        "package",
-        "validate",
-        "test-package",
-        "--package-path",
-        "/test/path/test-package.yaml",
-    ]);
     cmd.assert().success();
 }
