@@ -131,7 +131,7 @@ impl fmt::Display for ValidationErrorCategory {
             Self::CommandSyntax => f.write_str("command_syntax"),
             Self::UrlFormat => f.write_str("url_format"),
             Self::FileSystem => f.write_str("file_system"),
-            Self::Availability => f.write_str("availablilty"),
+            Self::Availability => f.write_str("availability"),
             Self::Other => f.write_str("other"),
         }
     }
