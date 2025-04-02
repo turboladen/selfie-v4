@@ -12,7 +12,7 @@ pub trait PackageRepository: Send + Sync {
 
     /// List all available packages in the package directory.
     ///
-    fn list_packages(&self) -> Result<Vec<Package>, PackageRepoError>;
+    fn list_packages(&self) -> Result<Vec<Result<Package, PackageParseError>>, PackageRepoError>;
 
     /// Find package files that match the given name.
     ///

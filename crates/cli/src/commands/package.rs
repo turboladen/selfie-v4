@@ -78,7 +78,7 @@ pub(crate) fn handle_validate<R: ProgressReporter>(
         config.environment()
     ));
 
-    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory(), &reporter);
+    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory());
 
     match repo.get_package(package_name) {
         Ok(package) => {

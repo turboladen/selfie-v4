@@ -6,23 +6,17 @@ use crate::{
         Package,
         port::{PackageParseError, PackageRepoError, PackageRepository},
     },
-    progress_reporter::port::ProgressReporter,
 };
 
 #[derive(Clone)]
-pub struct YamlPackageRepository<'a, F: FileSystem, R: ProgressReporter> {
+pub struct YamlPackageRepository<'a, F: FileSystem> {
     fs: F,
     package_dir: &'a Path,
-    progress_manager: &'a R,
 }
 
-impl<'a, F: FileSystem, R: ProgressReporter> YamlPackageRepository<'a, F, R> {
-    pub fn new(fs: F, package_dir: &'a Path, progress_manager: &'a R) -> Self {
-        Self {
-            fs,
-            package_dir,
-            progress_manager,
-        }
+impl<'a, F: FileSystem> YamlPackageRepository<'a, F> {
+    pub fn new(fs: F, package_dir: &'a Path) -> Self {
+        Self { fs, package_dir }
     }
 
     /// List all YAML files in a directory.
@@ -75,7 +69,7 @@ impl<'a, F: FileSystem, R: ProgressReporter> YamlPackageRepository<'a, F, R> {
     }
 }
 
-impl<F: FileSystem, R: ProgressReporter> PackageRepository for YamlPackageRepository<'_, F, R> {
+impl<F: FileSystem> PackageRepository for YamlPackageRepository<'_, F> {
     fn get_package(&self, name: &str) -> Result<Package, PackageRepoError> {
         let package_files = self.find_package_files(name)?;
 
@@ -96,7 +90,7 @@ impl<F: FileSystem, R: ProgressReporter> PackageRepository for YamlPackageReposi
         Ok(package)
     }
 
-    fn list_packages(&self) -> Result<Vec<Package>, PackageRepoError> {
+    fn list_packages(&self) -> Result<Vec<Result<Package, PackageParseError>>, PackageRepoError> {
         if !self.fs.path_exists(self.package_dir) {
             return Err(PackageRepoError::DirectoryNotFound(
                 self.package_dir.to_string_lossy().into_owned(),
@@ -107,20 +101,10 @@ impl<F: FileSystem, R: ProgressReporter> PackageRepository for YamlPackageReposi
         let yaml_files = self.list_yaml_files(self.package_dir)?;
 
         // Parse each file into a Package
-        let mut packages = Vec::new();
+        let mut packages: Vec<Result<Package, PackageParseError>> = Vec::new();
+
         for path in yaml_files {
-            match self.load_package_from_file(&path) {
-                Ok(package) => packages.push(package),
-                Err(err) => {
-                    // Skip invalid files but log them if we had a proper logging system
-                    if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                        self.progress_manager.report_error(format!(
-                            "Warning: Failed to parse package file '{}': {}",
-                            file_name, err
-                        ));
-                    }
-                }
-            }
+            packages.push(self.load_package_from_file(&path));
         }
 
         Ok(packages)

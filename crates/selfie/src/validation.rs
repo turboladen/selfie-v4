@@ -160,6 +160,10 @@ pub enum ValidationErrorCategory {
     /// Shell command syntax errors
     ///
     CommandSyntax,
+
+    /// URL format errors
+    ///
+    UrlFormat,
 }
 
 impl fmt::Display for ValidationErrorCategory {
@@ -169,6 +173,7 @@ impl fmt::Display for ValidationErrorCategory {
             Self::InvalidValue => f.write_str("invalid_value"),
             Self::Environment => f.write_str("environment"),
             Self::CommandSyntax => f.write_str("command_syntax"),
+            Self::UrlFormat => f.write_str("url_format"),
         }
     }
 }
