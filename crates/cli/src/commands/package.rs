@@ -1,11 +1,15 @@
-use comfy_table::Table;
+use comfy_table::{
+    ContentArrangement, Table,
+    modifiers::{UTF8_ROUND_CORNERS, UTF8_SOLID_INNER_BORDERS},
+    presets::UTF8_FULL,
+};
 use selfie::{
     config::AppConfig,
     fs::real::RealFileSystem,
     package::{port::PackageRepository, repository::YamlPackageRepository},
     progress_reporter::port::ProgressReporter,
 };
-use tracing::{info};
+use tracing::info;
 
 pub(crate) fn handle_install<R: ProgressReporter>(
     package_name: &str,
@@ -80,12 +84,17 @@ pub(crate) fn handle_validate<R: ProgressReporter>(
         Ok(package) => {
             let validation_result = package.validate(config.environment());
 
-            if validation_result.has_errors() {
+            if validation_result.issues().has_errors() {
                 reporter.report_error("Validation failed.");
                 let mut table = Table::new();
-                table.set_header(vec!["Category", "Field", "Message", "Suggestion"]);
+                table
+                    .load_preset(UTF8_FULL)
+                    .apply_modifier(UTF8_ROUND_CORNERS)
+                    .apply_modifier(UTF8_SOLID_INNER_BORDERS)
+                    .set_content_arrangement(ContentArrangement::Dynamic)
+                    .set_header(vec!["Category", "Field", "Message", "Suggestion"]);
 
-                for error in validation_result.errors() {
+                for error in validation_result.issues().errors() {
                     table.add_row(vec![
                         reporter.format_error(error.category().to_string()),
                         error.field().to_string(),
@@ -96,7 +105,7 @@ pub(crate) fn handle_validate<R: ProgressReporter>(
                             .unwrap_or_default(),
                     ]);
                 }
-                for warning in validation_result.warnings() {
+                for warning in validation_result.issues().warnings() {
                     table.add_row(vec![
                         reporter.format_warning(warning.category().to_string()),
                         warning.field().to_string(),
@@ -122,4 +131,3 @@ pub(crate) fn handle_validate<R: ProgressReporter>(
         }
     }
 }
-

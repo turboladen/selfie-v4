@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::validation::{ValidationErrorCategory, ValidationIssue, ValidationLevel};
+use crate::validation::{ValidationErrorCategory, ValidationIssue, ValidationIssues};
 
 use super::Package;
 
@@ -17,53 +17,20 @@ pub struct ValidationResult {
 
     /// List of validation issues found
     ///
-    pub(crate) issues: Vec<ValidationIssue>,
+    pub(crate) issues: ValidationIssues,
 }
 
 impl ValidationResult {
-    pub fn issues(&self) -> &[ValidationIssue] {
+    pub fn package_name(&self) -> &str {
+        &self.package_name
+    }
+
+    pub fn package_path(&self) -> Option<&PathBuf> {
+        self.package_path.as_ref()
+    }
+
+    pub fn issues(&self) -> &ValidationIssues {
         &self.issues
-    }
-
-    /// Returns true if the validation passed (no errors)
-    pub fn is_valid(&self) -> bool {
-        !self.has_errors()
-    }
-
-    pub fn has_issues(&self) -> bool {
-        !self.issues.is_empty()
-    }
-
-    /// Returns true if the validation has errors (warnings are okay)
-    pub fn has_errors(&self) -> bool {
-        self.issues
-            .iter()
-            .any(|issue| matches!(issue.level, ValidationLevel::Error))
-    }
-
-    /// Get all errors (not warnings)
-    ///
-    pub fn errors(&self) -> Vec<&ValidationIssue> {
-        self.issues
-            .iter()
-            .filter(|issue| issue.level == ValidationLevel::Error)
-            .collect()
-    }
-
-    /// Get all warnings (not errors)
-    pub fn warnings(&self) -> Vec<&ValidationIssue> {
-        self.issues
-            .iter()
-            .filter(|issue| issue.level == ValidationLevel::Warning)
-            .collect()
-    }
-
-    /// Get issues by category
-    pub fn issues_by_category(&self, category: &ValidationErrorCategory) -> Vec<&ValidationIssue> {
-        self.issues
-            .iter()
-            .filter(|issue| issue.category == *category)
-            .collect()
     }
 }
 
@@ -80,7 +47,7 @@ impl Package {
         ValidationResult {
             package_name: self.name.clone(),
             package_path: Some(self.path.clone()),
-            issues,
+            issues: issues.into(),
         }
     }
 

@@ -31,7 +31,6 @@ fn setup_test_config() -> TempDir {
 
 fn add_package(base_dir: &TempDir, package: &Package) {
     let yaml = serde_yaml::to_string(package).unwrap();
-    dbg!(&yaml);
     let packages_path = base_dir.path().join("packages");
     fs::create_dir_all(&packages_path).unwrap();
     let package_path = packages_path.join(format!("{}.yaml", package.name()));

@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.97"
 clap = { version = "4.5.31", features = ["derive"] }
-comfy-table = "7.1.4"
+comfy-table = { version = "7.1.4", features = ["custom_styling"] }
 console.workspace = true
 selfie = { path = "../selfie/" }
 tracing.workspace = true

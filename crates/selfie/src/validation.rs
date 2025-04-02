@@ -1,5 +1,61 @@
 use core::fmt;
 
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ValidationIssues(Vec<ValidationIssue>);
+
+impl ValidationIssues {
+    pub fn all_issues(&self) -> &[ValidationIssue] {
+        &self.0
+    }
+
+    /// Returns true if the validation passed (no errors)
+    pub fn is_valid(&self) -> bool {
+        !self.has_errors()
+    }
+
+    pub fn has_issues(&self) -> bool {
+        !self.0.is_empty()
+    }
+
+    /// Returns true if the validation has errors (warnings are okay)
+    pub fn has_errors(&self) -> bool {
+        self.0
+            .iter()
+            .any(|issue| matches!(issue.level, ValidationLevel::Error))
+    }
+
+    /// Get all errors (not warnings)
+    ///
+    pub fn errors(&self) -> Vec<&ValidationIssue> {
+        self.0
+            .iter()
+            .filter(|issue| issue.level == ValidationLevel::Error)
+            .collect()
+    }
+
+    /// Get all warnings (not errors)
+    pub fn warnings(&self) -> Vec<&ValidationIssue> {
+        self.0
+            .iter()
+            .filter(|issue| issue.level == ValidationLevel::Warning)
+            .collect()
+    }
+
+    /// Get issues by category
+    pub fn issues_by_category(&self, category: &ValidationErrorCategory) -> Vec<&ValidationIssue> {
+        self.0
+            .iter()
+            .filter(|issue| issue.category == *category)
+            .collect()
+    }
+}
+
+impl From<Vec<ValidationIssue>> for ValidationIssues {
+    fn from(value: Vec<ValidationIssue>) -> Self {
+        Self(value)
+    }
+}
+
 /// A single validation issue (error or warning)
 ///
 #[derive(Debug, Clone, PartialEq)]
