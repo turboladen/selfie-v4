@@ -4,20 +4,24 @@ use core::fmt;
 pub struct ValidationIssues(Vec<ValidationIssue>);
 
 impl ValidationIssues {
+    #[must_use]
     pub fn all_issues(&self) -> &[ValidationIssue] {
         &self.0
     }
 
     /// Returns true if the validation passed (no errors)
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         !self.has_errors()
     }
 
+    #[must_use]
     pub fn has_issues(&self) -> bool {
         !self.0.is_empty()
     }
 
     /// Returns true if the validation has errors (warnings are okay)
+    #[must_use]
     pub fn has_errors(&self) -> bool {
         self.0
             .iter()
@@ -26,6 +30,7 @@ impl ValidationIssues {
 
     /// Get all errors (not warnings)
     ///
+    #[must_use]
     pub fn errors(&self) -> Vec<&ValidationIssue> {
         self.0
             .iter()
@@ -34,6 +39,7 @@ impl ValidationIssues {
     }
 
     /// Get all warnings (not errors)
+    #[must_use]
     pub fn warnings(&self) -> Vec<&ValidationIssue> {
         self.0
             .iter()
@@ -42,6 +48,7 @@ impl ValidationIssues {
     }
 
     /// Get issues by category
+    #[must_use]
     pub fn issues_by_category(&self, category: &ValidationErrorCategory) -> Vec<&ValidationIssue> {
         self.0
             .iter()
@@ -95,7 +102,7 @@ impl ValidationIssue {
             field: field.to_string(),
             message: message.to_string(),
             level: ValidationLevel::Error,
-            suggestion: suggestion.map(|s| s.to_string()),
+            suggestion: suggestion.map(std::string::ToString::to_string),
         }
     }
 
@@ -111,26 +118,31 @@ impl ValidationIssue {
             field: field.to_string(),
             message: message.to_string(),
             level: ValidationLevel::Warning,
-            suggestion: suggestion.map(|s| s.to_string()),
+            suggestion: suggestion.map(std::string::ToString::to_string),
         }
     }
 
+    #[must_use]
     pub fn category(&self) -> ValidationErrorCategory {
         self.category
     }
 
+    #[must_use]
     pub fn field(&self) -> &str {
         &self.field
     }
 
+    #[must_use]
     pub fn message(&self) -> &str {
         &self.message
     }
 
+    #[must_use]
     pub fn level(&self) -> ValidationLevel {
         self.level
     }
 
+    #[must_use]
     pub fn suggestion(&self) -> Option<&String> {
         self.suggestion.as_ref()
     }

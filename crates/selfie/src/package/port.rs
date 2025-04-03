@@ -48,10 +48,12 @@ pub enum PackageRepoError {
 pub struct ListPackagesOutput(pub(crate) Vec<Result<Package, PackageParseError>>);
 
 impl ListPackagesOutput {
+    #[must_use]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -63,6 +65,7 @@ impl ListPackagesOutput {
         })
     }
 
+    #[must_use]
     pub fn get(&self, package_name: &str) -> Option<&Package> {
         self.0.iter().find_map(|maybe_p| match maybe_p {
             Ok(p) => {

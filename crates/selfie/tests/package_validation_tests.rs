@@ -10,7 +10,7 @@ fn create_test_package(dir: &Path, name: &str, content: &str) {
     let package_dir = dir.join("packages");
     fs::create_dir_all(&package_dir).unwrap();
 
-    let package_path = package_dir.join(format!("{}.yaml", name));
+    let package_path = package_dir.join(format!("{name}.yaml"));
     fs::write(&package_path, content).unwrap();
 }
 

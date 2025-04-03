@@ -54,6 +54,7 @@ pub struct EnvironmentConfig {
 
 impl Package {
     /// Create a new package with the specified attributes. See `PackageBuilder`.
+    #[must_use]
     pub fn new(
         name: String,
         version: String,
@@ -72,26 +73,32 @@ impl Package {
         }
     }
 
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    #[must_use]
     pub fn version(&self) -> &str {
         &self.version
     }
 
+    #[must_use]
     pub fn homepage(&self) -> Option<&String> {
         self.homepage.as_ref()
     }
 
+    #[must_use]
     pub fn description(&self) -> Option<&String> {
         self.description.as_ref()
     }
 
+    #[must_use]
     pub fn environments(&self) -> &HashMap<String, EnvironmentConfig> {
         &self.environments
     }
 
+    #[must_use]
     pub fn path(&self) -> &PathBuf {
         &self.path
     }

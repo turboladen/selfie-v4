@@ -45,8 +45,7 @@ pub(crate) fn handle_info<R: ProgressReporter>(
     info!("Getting info for package: {}", package_name);
     // TODO: Implement package info
     reporter.report_info(format!(
-        "Displaying info for package: {} (not yet implemented)",
-        package_name
+        "Displaying info for package: {package_name} (not yet implemented)"
     ));
     0
 }
@@ -59,8 +58,7 @@ pub(crate) fn handle_create<R: ProgressReporter>(
     info!("Creating package: {}", package_name);
     // TODO: Implement package creation
     reporter.report_info(format!(
-        "Creating package: {} (not yet implemented)",
-        package_name
+        "Creating package: {package_name} (not yet implemented)"
     ));
     0
 }

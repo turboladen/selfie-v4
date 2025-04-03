@@ -21,14 +21,17 @@ pub struct ValidationResult {
 }
 
 impl ValidationResult {
+    #[must_use]
     pub fn package_name(&self) -> &str {
         &self.package_name
     }
 
+    #[must_use]
     pub fn package_path(&self) -> Option<&PathBuf> {
         self.package_path.as_ref()
     }
 
+    #[must_use]
     pub fn issues(&self) -> &ValidationIssues {
         &self.issues
     }
@@ -36,6 +39,7 @@ impl ValidationResult {
 
 impl Package {
     /// Perform all basic domain validations
+    #[must_use]
     pub fn validate(&self, current_env: &str) -> ValidationResult {
         let mut issues = Vec::new();
 
@@ -148,10 +152,9 @@ impl Package {
             issues.push(ValidationIssue::warning(
                 ValidationErrorCategory::Environment,
                 "environments",
-                &format!("Current environment '{}' is not configured", current_env),
+                &format!("Current environment '{current_env}' is not configured"),
                 Some(&format!(
-                    "Add an environment section for '{}' if needed for this environment.",
-                    current_env
+                    "Add an environment section for '{current_env}' if needed for this environment."
                 )),
             ));
         }
@@ -161,7 +164,7 @@ impl Package {
             if env_config.install.is_empty() {
                 issues.push(ValidationIssue::error(
                     ValidationErrorCategory::RequiredField,
-                    &format!("environments.{}.install", env_name),
+                    &format!("environments.{env_name}.install"),
                     "Install command is required",
                     Some("Add an install command like 'brew install package-name'."),
                 ));
@@ -172,7 +175,7 @@ impl Package {
                 if dep.is_empty() {
                     issues.push(ValidationIssue::error(
                         ValidationErrorCategory::InvalidValue,
-                        &format!("environments.{}.dependencies[{}]", env_name, i),
+                        &format!("environments.{env_name}.dependencies[{i}]"),
                         "Dependency name cannot be empty",
                         Some("Remove the empty dependency or provide a valid name."),
                     ));
@@ -208,7 +211,7 @@ impl Package {
                     issues.push(ValidationIssue::error(
                         ValidationErrorCategory::UrlFormat,
                         "homepage",
-                        &format!("Invalid URL format: {}", err),
+                        &format!("Invalid URL format: {err}"),
                         Some("Provide a valid URL with http:// or https:// prefix."),
                     ));
                 }
@@ -225,14 +228,14 @@ impl Package {
             // Check install command syntax
             issues.extend(Self::validate_single_command(
                 &env_config.install,
-                &format!("environments.{}.install", env_name),
+                &format!("environments.{env_name}.install"),
             ));
 
             // Check check command syntax if present
             if let Some(check_cmd) = &env_config.check {
                 issues.extend(Self::validate_single_command(
                     check_cmd,
-                    &format!("environments.{}.check", env_name),
+                    &format!("environments.{env_name}.check"),
                 ));
             }
         }
@@ -286,14 +289,14 @@ impl Package {
 
         // Check for invalid redirections
         for redirect in &[">", ">>", "<"] {
-            if command.contains(&format!("{} ", redirect))
-                && !command.contains(&format!("{} /", redirect))
-                && !command.contains(&format!("{} ~/", redirect))
+            if command.contains(&format!("{redirect} "))
+                && !command.contains(&format!("{redirect} /"))
+                && !command.contains(&format!("{redirect} ~/"))
             {
                 issues.push(ValidationIssue::warning(
                     ValidationErrorCategory::CommandSyntax,
                     field_name,
-                    &format!("Potential invalid redirection with {}", redirect),
+                    &format!("Potential invalid redirection with {redirect}"),
                     Some("Ensure the redirection path is valid and absolute."),
                 ));
             }

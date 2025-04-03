@@ -9,7 +9,7 @@ fn setup_test_config(yaml_content: &str) -> TempDir {
 
     let config_path = config_dir.join("config.yaml");
     let mut config_file = fs::File::create(&config_path).unwrap();
-    writeln!(config_file, "{}", yaml_content).unwrap();
+    writeln!(config_file, "{yaml_content}").unwrap();
 
     temp_dir
 }

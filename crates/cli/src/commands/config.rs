@@ -20,7 +20,7 @@ pub(crate) fn handle_validate<R: ProgressReporter>(
     info!("Validating configuration");
 
     match original_config.validate(|msg| reporter.report_info(msg)) {
-        Ok(_) => {
+        Ok(()) => {
             reporter.report_success("Configuration validation successful.");
             report_with_style(&reporter, "environment:", original_config.environment());
             report_with_style(

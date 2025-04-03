@@ -13,21 +13,25 @@ pub struct PackageBuilder {
 }
 
 impl PackageBuilder {
+    #[must_use]
     pub fn name(mut self, name: &str) -> Self {
         self.name = name.to_string();
         self
     }
 
+    #[must_use]
     pub fn version(mut self, version: &str) -> Self {
         self.version = version.to_string();
         self
     }
 
+    #[must_use]
     pub fn homepage(mut self, homepage: &str) -> Self {
         self.homepage = Some(homepage.to_string());
         self
     }
 
+    #[must_use]
     pub fn description(mut self, description: &str) -> Self {
         self.description = Some(description.to_string());
         self
@@ -53,6 +57,7 @@ impl PackageBuilder {
         self
     }
 
+    #[must_use]
     pub fn build(self) -> Package {
         Package::new(
             self.name,

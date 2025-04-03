@@ -18,17 +18,19 @@ pub struct ValidationResult {
 }
 
 impl ValidationResult {
+    #[must_use]
     pub fn config_file_path(&self) -> Option<&PathBuf> {
         self.config_file_path.as_ref()
     }
 
+    #[must_use]
     pub fn issues(&self) -> &ValidationIssues {
         &self.issues
     }
 }
 
 impl AppConfig {
-    /// Full validation for the AppConfig
+    /// Full validation for the `AppConfig`
     ///
     // TODO: Convert to use `crate::validation`.
     //

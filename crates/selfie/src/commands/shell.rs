@@ -158,12 +158,11 @@ impl CommandRunner for ShellCommandRunner {
             }
         });
 
-        match timeout_future.await {
-            Ok(result) => result,
-            Err(_) => {
-                let _ = child.kill().await;
-                Err(CommandError::Timeout(timeout))
-            }
+        if let Ok(result) = timeout_future.await {
+            result
+        } else {
+            let _ = child.kill().await;
+            Err(CommandError::Timeout(timeout))
         }
     }
 }

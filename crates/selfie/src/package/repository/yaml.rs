@@ -110,8 +110,8 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<'_, F> {
         }
 
         // Look for both name.yaml and name.yml
-        let yaml_path = self.package_dir.join(format!("{}.yaml", name));
-        let yml_path = self.package_dir.join(format!("{}.yml", name));
+        let yaml_path = self.package_dir.join(format!("{name}.yaml"));
+        let yml_path = self.package_dir.join(format!("{name}.yml"));
 
         let mut result = Vec::new();
         if self.fs.path_exists(&yaml_path) {
@@ -143,13 +143,13 @@ mod tests {
 
         // Create mock package file
         let package_path = package_dir.join("ripgrep.yaml");
-        let yaml = r#"
+        let yaml = r"
             name: ripgrep
             version: 0.1.0
             environments:
               mac:
                 install: brew install ripgrep
-        "#;
+        ";
 
         fs.expect_path_exists()
             .with(predicate::eq(package_path.clone()))
@@ -288,21 +288,21 @@ mod tests {
             .returning(|_| true);
 
         // Add valid package files
-        let package1 = r#"
+        let package1 = r"
             name: ripgrep
             version: 1.0.0
             environments:
               test-env:
                 install: brew install ripgrep
-        "#;
+        ";
 
-        let package2 = r#"
+        let package2 = r"
             name: fzf
             version: 0.2.0
             environments:
               other-env:
                 install: brew install fzf
-        "#;
+        ";
 
         fs.mock_list_directory(
             package_dir.clone(),
