@@ -41,9 +41,12 @@ pub(crate) fn handle_validate<R: ProgressReporter>(
             report_with_style(&reporter, "stop_on_error:", original_config.stop_on_error());
             report_with_style(&reporter, "verbose:", original_config.verbose());
             report_with_style(&reporter, "use_colors:", original_config.use_colors());
-        }
-        Err(_) => todo!(),
-    }
 
-    0
+            0
+        }
+        Err(e) => {
+            reporter.report_error(e.to_string());
+            1
+        }
+    }
 }

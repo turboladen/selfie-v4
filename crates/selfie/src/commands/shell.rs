@@ -129,34 +129,40 @@ impl CommandRunner for ShellCommandRunner {
             }
         });
 
-        let timeout_future = tokio::time::sleep(timeout);
-        tokio::pin!(timeout_future);
+        // let timeout_future = tokio::time::sleep(timeout);
+        // tokio::pin!(timeout_future);
 
-        loop {
-            tokio::select! {
-                () = &mut timeout_future => {
-                    let _ = child.kill().await;
-                    return Err(CommandError::Timeout(timeout));
-                },
-                result = stdout.read(&mut stdout_buf) => {
-                    handle_chunked_read_result(result, &mut full_stdout, &mut stdout_buf, &tx, OutputChunk::Stdout).await?;
-                },
-                result = stderr.read(&mut stderr_buf) => {
-                    handle_chunked_read_result(result, &mut full_stderr, &mut stderr_buf, &tx, OutputChunk::Stderr).await?;
-                },
-                status = child.wait() => {
-                    let status = status.map_err(CommandError::from)?;
-                    let duration = start_time.elapsed();
+        let timeout_future = tokio::time::timeout(timeout, async {
+            loop {
+                tokio::select! {
+                    result = stdout.read(&mut stdout_buf) => {
+                        handle_chunked_read_result(result, &mut full_stdout, &mut stdout_buf, &tx, OutputChunk::Stdout).await?;
+                    },
+                    result = stderr.read(&mut stderr_buf) => {
+                        handle_chunked_read_result(result, &mut full_stderr, &mut stderr_buf, &tx, OutputChunk::Stderr).await?;
+                    },
+                    status = child.wait() => {
+                        let status = status.map_err(CommandError::from)?;
+                        let duration = start_time.elapsed();
 
-                    return Ok(CommandOutput {
-                        output: Output {
-                            status,
-                            stdout: full_stdout,
-                            stderr: full_stderr,
-                        },
-                        duration,
-                    });
+                        return Ok(CommandOutput {
+                            output: Output {
+                                status,
+                                stdout: full_stdout,
+                                stderr: full_stderr,
+                            },
+                            duration,
+                        });
+                    }
                 }
+            }
+        });
+
+        match timeout_future.await {
+            Ok(result) => result,
+            Err(_) => {
+                let _ = child.kill().await;
+                Err(CommandError::Timeout(timeout))
             }
         }
     }
