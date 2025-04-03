@@ -45,6 +45,14 @@ impl PackageBuilder {
         self
     }
 
+    pub fn path<T>(mut self, path: T) -> Self
+    where
+        PathBuf: From<T>,
+    {
+        self.path = path.into();
+        self
+    }
+
     pub fn build(self) -> Package {
         Package::new(
             self.name,
