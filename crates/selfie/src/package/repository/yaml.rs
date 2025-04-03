@@ -72,7 +72,12 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<'_, F> {
         }
 
         let package_file = &package_files[0];
-        let package = self.load_package_from_file(package_file)?;
+        let package = self.load_package_from_file(package_file).map_err(|e| {
+            PackageRepoError::ParseError {
+                source: e,
+                packages_path: self.package_dir.to_path_buf(),
+            }
+        })?;
 
         Ok(package)
     }

@@ -30,8 +30,12 @@ pub enum PackageRepoError {
     #[error("Multiple packages found with name: {0}")]
     MultiplePackagesFound(String),
 
-    #[error("Parse error: {0}")]
-    ParseError(#[from] PackageParseError),
+    #[error("Parse error `{source}` from package in path {}", packages_path.display())]
+    ParseError {
+        #[source]
+        source: PackageParseError,
+        packages_path: PathBuf,
+    },
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
