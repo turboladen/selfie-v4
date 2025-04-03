@@ -4,7 +4,7 @@ use crate::{
     fs::FileSystem,
     package::{
         Package,
-        port::{PackageParseError, PackageRepoError, PackageRepository},
+        port::{ListPackagesOutput, PackageParseError, PackageRepoError, PackageRepository},
     },
 };
 
@@ -44,25 +44,12 @@ impl<'a, F: FileSystem> YamlPackageRepository<'a, F> {
 
     // Load a Package from a file using the FileSystem trait
     fn load_package_from_file(&self, path: &Path) -> Result<Package, PackageParseError> {
-        fn from_yaml(yaml_str: &str) -> Result<Package, PackageParseError> {
-            let mut package: Package = serde_yaml::from_str(yaml_str)?;
-
-            // Ensure defaults are set
-            for env_config in package.environments.values_mut() {
-                if env_config.dependencies.is_empty() {
-                    env_config.dependencies = Vec::new();
-                }
-            }
-
-            Ok(package)
-        }
-
         let content = self
             .fs
             .read_file(path)
             .map_err(|e| PackageParseError::FileSystemError(e.to_string()))?;
 
-        let mut package = from_yaml(&content)?;
+        let mut package: Package = serde_yaml::from_str(&content)?;
         package.path = path.to_path_buf();
 
         Ok(package)
@@ -90,7 +77,7 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<'_, F> {
         Ok(package)
     }
 
-    fn list_packages(&self) -> Result<Vec<Result<Package, PackageParseError>>, PackageRepoError> {
+    fn list_packages(&self) -> Result<ListPackagesOutput, PackageRepoError> {
         if !self.fs.path_exists(self.package_dir) {
             return Err(PackageRepoError::DirectoryNotFound(
                 self.package_dir.to_string_lossy().into_owned(),
@@ -107,7 +94,7 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<'_, F> {
             packages.push(self.load_package_from_file(&path));
         }
 
-        Ok(packages)
+        Ok(ListPackagesOutput(packages))
     }
 
     fn find_package_files(&self, name: &str) -> Result<Vec<PathBuf>, PackageRepoError> {
@@ -138,7 +125,7 @@ mod tests {
     use mockall::*;
 
     use super::*;
-    use crate::{fs::filesystem::MockFileSystem, progress_reporter::port::MockProgressReporter};
+    use crate::fs::filesystem::MockFileSystem;
 
     #[test]
     fn test_get_package_success() {
@@ -167,8 +154,7 @@ mod tests {
             .returning(|_| false);
         fs.mock_read_file(package_path, yaml);
 
-        let progress_manager = MockProgressReporter::default();
-        let repo = YamlPackageRepository::new(fs, &package_dir, &progress_manager);
+        let repo = YamlPackageRepository::new(fs, &package_dir);
         let package = repo.get_package("ripgrep").unwrap();
 
         assert_eq!(package.name, "ripgrep");
@@ -191,8 +177,7 @@ mod tests {
             .with(predicate::eq(package_dir.join("nonexistent.yml")))
             .returning(|_| false);
 
-        let progress_manager = MockProgressReporter::default();
-        let repo = YamlPackageRepository::new(fs, &package_dir, &progress_manager);
+        let repo = YamlPackageRepository::new(fs, &package_dir);
         let result = repo.get_package("nonexistent");
 
         assert!(matches!(
@@ -210,8 +195,7 @@ mod tests {
             .with(predicate::eq(package_dir.clone()))
             .returning(|_| false);
 
-        let progress_manager = MockProgressReporter::default();
-        let repo = YamlPackageRepository::new(fs, &package_dir, &progress_manager);
+        let repo = YamlPackageRepository::new(fs, &package_dir);
         let result = repo.get_package("ripgrep");
 
         assert!(matches!(
@@ -232,9 +216,7 @@ mod tests {
         fs.mock_path_exists(&package_dir, true);
         fs.mock_path_exists(&yaml_path, true);
         fs.mock_path_exists(&yml_path, true);
-
-        let progress_manager = MockProgressReporter::default();
-        let repo = YamlPackageRepository::new(fs, &package_dir, &progress_manager);
+        let repo = YamlPackageRepository::new(fs, &package_dir);
         let result = repo.get_package("ripgrep");
 
         assert!(matches!(
@@ -274,12 +256,11 @@ mod tests {
             .with(predicate::eq(package_dir.join("nonexistent.yml")))
             .returning(|_| false);
 
-        let progress_manager = MockProgressReporter::default();
-        let repo = YamlPackageRepository::new(fs, &package_dir, &progress_manager);
+        let repo = YamlPackageRepository::new(fs, &package_dir);
 
         // Should find ripgrep.yaml
         let files = repo.find_package_files("ripgrep").unwrap();
-        assert_eq!(files.len(), 1);
+        assert_eq!(files.len(), 1, "{:#?}", &files);
         assert_eq!(files[0], yaml_path);
 
         // Should find other.yml
@@ -331,21 +312,27 @@ mod tests {
         fs.mock_read_file(package_dir.join("fzf.yml"), package2);
         fs.mock_read_file(package_dir.join("invalid.yaml"), "not valid yaml: :");
 
-        let mut progress_manager = MockProgressReporter::default();
-        progress_manager
-            .expect_report_error::<String>()
-            .with(predicate::function(|s: &String| s.starts_with("Warning:")))
-            .returning(|_| ());
-
-        let repo = YamlPackageRepository::new(fs, &package_dir, &progress_manager);
-        let packages = repo.list_packages().unwrap();
+        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let package_output = repo.list_packages().unwrap();
 
         // Should find both valid packages
-        assert_eq!(packages.len(), 2);
+        assert_eq!(
+            package_output.valid_packages().collect::<Vec<_>>().len(),
+            2,
+            "{:#?}",
+            &package_output
+        );
+        assert_eq!(
+            package_output.invalid_packages().collect::<Vec<_>>().len(),
+            1,
+            "{:#?}",
+            &package_output
+        );
+        assert_eq!(package_output.len(), 3, "{:#?}", &package_output);
 
         // Check package details
-        let ripgrep = packages.iter().find(|p| p.name == "ripgrep").unwrap();
-        let fzf = packages.iter().find(|p| p.name == "fzf").unwrap();
+        let ripgrep = package_output.get("ripgrep").unwrap();
+        let fzf = package_output.get("fzf").unwrap();
 
         assert_eq!(ripgrep.version, "1.0.0");
         assert!(ripgrep.environments.contains_key("test-env"));
@@ -372,8 +359,7 @@ mod tests {
                 ])
             });
 
-        let progress_manager = MockProgressReporter::default();
-        let repo = YamlPackageRepository::new(fs, Path::new("/dummy"), &progress_manager); // Path doesn't matter here
+        let repo = YamlPackageRepository::new(fs, Path::new("/dummy")); // Path doesn't matter here
         let yaml_files = repo.list_yaml_files(&dir).unwrap();
 
         // Should find all yaml/yml files regardless of case

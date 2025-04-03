@@ -315,7 +315,10 @@ impl Package {
 
 #[cfg(test)]
 mod tests {
-    use crate::package::{EnvironmentConfig, builder::PackageBuilder};
+    use crate::{
+        package::{EnvironmentConfig, builder::PackageBuilder},
+        validation::ValidationLevel,
+    };
 
     use super::*;
 
@@ -327,7 +330,7 @@ mod tests {
             .environment("test-env", |b| b.install("test install"))
             .build();
 
-        assert!(package.validate("test-env").is_valid());
+        assert!(package.validate("test-env").issues().is_valid());
     }
 
     #[test]
@@ -456,7 +459,7 @@ mod tests {
             .build();
 
         let result = package.validate("test-env");
-        assert!(!result.has_issues());
+        assert!(!result.issues().has_issues());
 
         // Test an invalid package with multiple issues
         let package = PackageBuilder::default()
@@ -467,6 +470,6 @@ mod tests {
             .build();
 
         let result = package.validate("test-env");
-        assert!(result.issues().len() >= 4); // At least 4 issues should be found
+        assert!(result.issues().all_issues().len() >= 4); // At least 4 issues should be found
     }
 }

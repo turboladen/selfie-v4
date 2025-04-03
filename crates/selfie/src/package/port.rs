@@ -12,7 +12,7 @@ pub trait PackageRepository: Send + Sync {
 
     /// List all available packages in the package directory.
     ///
-    fn list_packages(&self) -> Result<Vec<Result<Package, PackageParseError>>, PackageRepoError>;
+    fn list_packages(&self) -> Result<ListPackagesOutput, PackageRepoError>;
 
     /// Find package files that match the given name.
     ///
@@ -38,6 +38,46 @@ pub enum PackageRepoError {
 
     #[error("Directory does not exist: {0}")]
     DirectoryNotFound(String),
+}
+
+#[derive(Debug)]
+pub struct ListPackagesOutput(pub(crate) Vec<Result<Package, PackageParseError>>);
+
+impl ListPackagesOutput {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn valid_packages(&self) -> impl Iterator<Item = &Package> {
+        self.0.iter().filter_map(|maybe_p| match maybe_p {
+            Ok(p) => Some(p),
+            Err(_) => None,
+        })
+    }
+
+    pub fn get(&self, package_name: &str) -> Option<&Package> {
+        self.0.iter().find_map(|maybe_p| match maybe_p {
+            Ok(p) => {
+                if p.name == package_name {
+                    Some(p)
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        })
+    }
+
+    pub fn invalid_packages(&self) -> impl Iterator<Item = &PackageParseError> {
+        self.0.iter().filter_map(|maybe_p| match maybe_p {
+            Ok(_) => None,
+            Err(e) => Some(e),
+        })
+    }
 }
 
 /// Errors related to package parsing
