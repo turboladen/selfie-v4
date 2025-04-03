@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 #[cfg_attr(feature = "with_mocks", mockall::automock)]
-pub trait ProgressReporter {
+pub trait ProgressReporter: Send + Sync {
     fn status_line<T: Display + 'static>(&self, message_type: MessageType, message: T) -> String;
 
     fn format<T: Display + 'static>(&self, message: T) -> String;

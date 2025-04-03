@@ -12,8 +12,7 @@ pub enum OutputChunk {
 impl fmt::Display for OutputChunk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Stdout(s) => f.write_str(s),
-            Self::Stderr(s) => f.write_str(s),
+            Self::Stdout(s) | Self::Stderr(s) => f.write_str(s),
         }
     }
 }
@@ -88,6 +87,7 @@ impl CommandOutput {
         String::from_utf8_lossy(&self.output.stdout)
     }
 
+    #[must_use]
     pub fn is_success(&self) -> bool {
         self.output.status.success()
     }

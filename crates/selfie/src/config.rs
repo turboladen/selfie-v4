@@ -1,16 +1,16 @@
 pub mod loader;
+pub mod validate;
 pub mod yaml;
 
 pub use self::yaml::YamlLoader;
 
 use std::{
     num::{NonZeroU64, NonZeroUsize},
-    path::{Path, PathBuf},
+    path::PathBuf,
     time::Duration,
 };
 
 use serde::Deserialize;
-use thiserror::Error;
 
 const VERBOSE_DEFAULT: bool = false;
 const USE_COLORS_DEFAULT: bool = true;
@@ -45,12 +45,15 @@ pub struct AppConfig {
 fn default_command_timeout() -> NonZeroU64 {
     unsafe { NonZeroU64::new_unchecked(60) }
 }
+
 fn default_stop_on_error() -> bool {
     true
 }
+
 fn default_max_parallel() -> NonZeroUsize {
     NonZeroUsize::new(num_cpus::get()).unwrap_or_else(|| unsafe { NonZeroUsize::new_unchecked(4) })
 }
+
 fn default_use_colors() -> bool {
     true
 }
@@ -106,58 +109,6 @@ impl AppConfig {
     pub fn use_colors_mut(&mut self) -> &mut bool {
         &mut self.use_colors
     }
-
-    /// Full validation for the AppConfig
-    ///
-    pub fn validate<F>(&self, report_fn: F) -> Result<(), ConfigValidationError>
-    where
-        F: Fn(&'static str),
-    {
-        validate_environment(&self.environment)?;
-        report_fn("`environment` is valid");
-        validate_package_directory(&self.package_directory)?;
-        report_fn("`package_directory` is valid");
-
-        Ok(())
-    }
-}
-
-#[derive(Error, Debug, PartialEq)]
-pub enum ConfigValidationError {
-    #[error("Empty field: {0}")]
-    EmptyField(String),
-
-    #[error("Invalid package directory: {0}")]
-    InvalidPackageDirectory(String),
-}
-
-fn validate_environment(environment: &str) -> Result<(), ConfigValidationError> {
-    if environment.is_empty() {
-        Err(ConfigValidationError::EmptyField("environment".to_string()))
-    } else {
-        Ok(())
-    }
-}
-
-fn validate_package_directory(package_directory: &Path) -> Result<(), ConfigValidationError> {
-    if package_directory.as_os_str().is_empty() {
-        return Err(ConfigValidationError::EmptyField(
-            "package_directory".to_string(),
-        ));
-    }
-
-    // Validate the package directory path
-    let package_dir = package_directory.to_string_lossy();
-    let expanded_path = shellexpand::tilde(&package_dir);
-    let expanded_path = Path::new(expanded_path.as_ref());
-
-    if !expanded_path.is_absolute() {
-        return Err(ConfigValidationError::InvalidPackageDirectory(
-            "Package directory must be an absolute path".to_string(),
-        ));
-    }
-
-    Ok(())
 }
 
 /// Builder pattern for `AppConfig` testing

@@ -2,6 +2,8 @@ mod cli;
 mod commands;
 mod config;
 
+use std::process;
+
 use clap::Parser;
 use selfie::{
     commands::ShellCommandRunner,
@@ -42,7 +44,7 @@ fn main() -> anyhow::Result<()> {
     // TODO: Pass runner to commands that need it
 
     // 4. Dispatch and execute the requested command
-    dispatch_command(&args.command, &config, original_config, reporter)?;
+    let exit_code = dispatch_command(&args.command, &config, original_config, reporter);
 
-    Ok(())
+    process::exit(exit_code)
 }

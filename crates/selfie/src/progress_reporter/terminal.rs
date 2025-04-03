@@ -19,6 +19,7 @@ pub struct TerminalProgressReporter {
 }
 
 impl TerminalProgressReporter {
+    #[must_use]
     pub fn new(use_colors: bool) -> Self {
         Self { use_colors }
     }
@@ -50,7 +51,7 @@ impl ProgressReporter for TerminalProgressReporter {
             message.to_string()
         };
 
-        format!("{}{}", prefix, formatted_message)
+        format!("{prefix}{formatted_message}")
     }
 
     fn format<T: Display + 'static>(&self, message: T) -> String {
