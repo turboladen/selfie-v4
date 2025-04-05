@@ -1,8 +1,3 @@
-use comfy_table::{
-    ContentArrangement, Table,
-    modifiers::{UTF8_ROUND_CORNERS, UTF8_SOLID_INNER_BORDERS},
-    presets::UTF8_FULL,
-};
 use selfie::{
     config::AppConfig,
     fs::real::RealFileSystem,
@@ -10,6 +5,8 @@ use selfie::{
     progress_reporter::port::ProgressReporter,
 };
 use tracing::info;
+
+use crate::commands::TableReporter;
 
 pub(crate) fn handle_install<R: ProgressReporter>(
     package_name: &str,
@@ -84,38 +81,21 @@ pub(crate) fn handle_validate<R: ProgressReporter>(
 
             if validation_result.issues().has_errors() {
                 reporter.report_error("Validation failed.");
-                let mut table = Table::new();
-                table
-                    .load_preset(UTF8_FULL)
-                    .apply_modifier(UTF8_ROUND_CORNERS)
-                    .apply_modifier(UTF8_SOLID_INNER_BORDERS)
-                    .set_content_arrangement(ContentArrangement::Dynamic)
-                    .set_header(vec!["Category", "Field", "Message", "Suggestion"]);
 
-                for error in validation_result.issues().errors() {
-                    table.add_row(vec![
-                        reporter.format_error(error.category().to_string()),
-                        error.field().to_string(),
-                        error.message().to_string(),
-                        error
-                            .suggestion()
-                            .map(ToString::to_string)
-                            .unwrap_or_default(),
-                    ]);
-                }
-                for warning in validation_result.issues().warnings() {
-                    table.add_row(vec![
-                        reporter.format_warning(warning.category().to_string()),
-                        warning.field().to_string(),
-                        warning.message().to_string(),
-                        warning
-                            .suggestion()
-                            .map(ToString::to_string)
-                            .unwrap_or_default(),
-                    ]);
-                }
-                eprintln!("{table}");
+                let mut table_reporter = TableReporter::new();
+                table_reporter
+                    .setup(vec!["Category", "Field", "Message", "Suggestion"])
+                    .add_errors(&validation_result.issues().errors(), &reporter)
+                    .add_warnings(&validation_result.issues().warnings(), &reporter)
+                    .print();
                 1
+            } else if validation_result.issues().has_warnings() {
+                let mut table_reporter = TableReporter::new();
+                table_reporter
+                    .setup(vec!["Category", "Field", "Message", "Suggestion"])
+                    .add_warnings(&validation_result.issues().warnings(), &reporter)
+                    .print();
+                0
             } else {
                 reporter.report_success("Package is valid.");
 

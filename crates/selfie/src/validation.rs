@@ -10,6 +10,7 @@ impl ValidationIssues {
     }
 
     /// Returns true if the validation passed (no errors)
+    ///
     #[must_use]
     pub fn is_valid(&self) -> bool {
         !self.has_errors()
@@ -20,7 +21,8 @@ impl ValidationIssues {
         !self.0.is_empty()
     }
 
-    /// Returns true if the validation has errors (warnings are okay)
+    /// Returns true if the validation has errors
+    ///
     #[must_use]
     pub fn has_errors(&self) -> bool {
         self.0
@@ -38,7 +40,17 @@ impl ValidationIssues {
             .collect()
     }
 
+    /// Returns true if the validation has warnings
+    ///
+    #[must_use]
+    pub fn has_warnings(&self) -> bool {
+        self.0
+            .iter()
+            .any(|issue| matches!(issue.level, ValidationLevel::Warning))
+    }
+
     /// Get all warnings (not errors)
+    ///
     #[must_use]
     pub fn warnings(&self) -> Vec<&ValidationIssue> {
         self.0
@@ -48,6 +60,7 @@ impl ValidationIssues {
     }
 
     /// Get issues by category
+    ///
     #[must_use]
     pub fn issues_by_category(&self, category: &ValidationErrorCategory) -> Vec<&ValidationIssue> {
         self.0
@@ -176,6 +189,10 @@ pub enum ValidationErrorCategory {
     /// URL format errors
     ///
     UrlFormat,
+
+    /// Path format errors
+    ///
+    PathFormat,
 }
 
 impl fmt::Display for ValidationErrorCategory {
@@ -186,6 +203,7 @@ impl fmt::Display for ValidationErrorCategory {
             Self::Environment => f.write_str("environment"),
             Self::CommandSyntax => f.write_str("command_syntax"),
             Self::UrlFormat => f.write_str("url_format"),
+            Self::PathFormat => f.write_str("path_format"),
         }
     }
 }

@@ -1,7 +1,10 @@
 pub(crate) mod config;
 pub(crate) mod package;
 
-use selfie::{config::AppConfig, progress_reporter::port::ProgressReporter};
+use comfy_table::Table;
+use selfie::{
+    config::AppConfig, progress_reporter::port::ProgressReporter, validation::ValidationIssue,
+};
 use tracing::debug;
 
 use crate::cli::{ClapCommands, ConfigSubcommands, PackageSubcommands};
@@ -60,5 +63,79 @@ fn dispatch_config_command<R: ProgressReporter>(
 
     match command {
         ConfigSubcommands::Validate => config::handle_validate(&original_config, reporter),
+    }
+}
+
+struct TableReporter {
+    table: Table,
+}
+
+impl TableReporter {
+    fn new() -> Self {
+        use comfy_table::Table;
+
+        Self {
+            table: Table::new(),
+        }
+    }
+
+    fn setup(&mut self, header: Vec<&'static str>) -> &mut Self {
+        use comfy_table::{
+            ContentArrangement,
+            modifiers::{UTF8_ROUND_CORNERS, UTF8_SOLID_INNER_BORDERS},
+            presets::UTF8_FULL,
+        };
+        self.table
+            .load_preset(UTF8_FULL)
+            .apply_modifier(UTF8_ROUND_CORNERS)
+            .apply_modifier(UTF8_SOLID_INNER_BORDERS)
+            .set_content_arrangement(ContentArrangement::Dynamic)
+            .set_header(header);
+
+        self
+    }
+
+    fn add_errors(
+        &mut self,
+        error_issues: &[&ValidationIssue],
+        reporter: &impl ProgressReporter,
+    ) -> &mut Self {
+        for error in error_issues {
+            self.table.add_row(vec![
+                reporter.format_error(error.category().to_string()),
+                error.field().to_string(),
+                error.message().to_string(),
+                error
+                    .suggestion()
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
+            ]);
+        }
+
+        self
+    }
+
+    fn add_warnings(
+        &mut self,
+        warning_issues: &[&ValidationIssue],
+        reporter: &impl ProgressReporter,
+    ) -> &mut Self {
+        for warning in warning_issues {
+            self.table.add_row(vec![
+                reporter.format_warning(warning.category().to_string()),
+                warning.field().to_string(),
+                warning.message().to_string(),
+                warning
+                    .suggestion()
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
+            ]);
+        }
+
+        self
+    }
+
+    fn print(&self) {
+        eprintln!("{}", &self.table);
     }
 }

@@ -1,52 +1,36 @@
-use console::style;
 use selfie::{config::AppConfig, progress_reporter::port::ProgressReporter};
 use tracing::info;
+
+use crate::commands::TableReporter;
 
 pub(crate) fn handle_validate<R: ProgressReporter>(
     original_config: &AppConfig,
     reporter: R,
 ) -> i32 {
-    fn report_with_style<S: ProgressReporter>(
-        reporter: &S,
-        param1: impl std::fmt::Display,
-        param2: impl std::fmt::Display,
-    ) {
-        reporter.report(format!(
-            "  {} {}",
-            style(param1).italic().dim(),
-            style(param2).bold()
-        ));
-    }
     info!("Validating configuration");
 
-    match original_config.validate(|msg| reporter.report_info(msg)) {
-        Ok(()) => {
-            reporter.report_success("Configuration validation successful.");
-            report_with_style(&reporter, "environment:", original_config.environment());
-            report_with_style(
-                &reporter,
-                "package_directory:",
-                original_config.package_directory().display(),
-            );
-            report_with_style(
-                &reporter,
-                "command_timeout:",
-                format!("{} seconds", original_config.command_timeout().as_secs()),
-            );
-            report_with_style(
-                &reporter,
-                "max_parallel_installations:",
-                original_config.max_parallel_installations().get(),
-            );
-            report_with_style(&reporter, "stop_on_error:", original_config.stop_on_error());
-            report_with_style(&reporter, "verbose:", original_config.verbose());
-            report_with_style(&reporter, "use_colors:", original_config.use_colors());
+    let result = original_config.validate();
 
-            0
-        }
-        Err(e) => {
-            reporter.report_error(e.to_string());
-            1
-        }
+    if result.issues().has_errors() {
+        reporter.report_error("Validation failed.");
+
+        let mut table_reporter = TableReporter::new();
+        table_reporter
+            .setup(vec!["Category", "Field", "Message", "Suggestion"])
+            .add_errors(&result.issues().errors(), &reporter)
+            .add_warnings(&result.issues().warnings(), &reporter)
+            .print();
+        1
+    } else if result.issues().has_warnings() {
+        let mut table_reporter = TableReporter::new();
+        table_reporter
+            .setup(vec!["Category", "Field", "Message", "Suggestion"])
+            .add_warnings(&result.issues().warnings(), &reporter)
+            .print();
+        0
+    } else {
+        reporter.report_success("Package is valid.");
+
+        0
     }
 }

@@ -129,9 +129,6 @@ impl CommandRunner for ShellCommandRunner {
             }
         });
 
-        // let timeout_future = tokio::time::sleep(timeout);
-        // tokio::pin!(timeout_future);
-
         let timeout_future = tokio::time::timeout(timeout, async {
             loop {
                 tokio::select! {

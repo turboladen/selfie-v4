@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::validation::ValidationIssues;
+use crate::validation::{ValidationErrorCategory, ValidationIssue, ValidationIssues};
 
 use super::AppConfig;
 
@@ -32,18 +32,20 @@ impl ValidationResult {
 impl AppConfig {
     /// Full validation for the `AppConfig`
     ///
-    // TODO: Convert to use `crate::validation`.
-    //
-    pub fn validate<F>(&self, report_fn: F) -> Result<(), ConfigValidationError>
-    where
-        F: Fn(&'static str),
-    {
-        validate_environment(&self.environment)?;
-        report_fn("`environment` is valid");
-        validate_package_directory(&self.package_directory)?;
-        report_fn("`package_directory` is valid");
+    pub fn validate(&self) -> ValidationResult {
+        let mut issues = Vec::new();
 
-        Ok(())
+        if let Some(issue) = validate_environment(&self.environment) {
+            issues.push(issue);
+        }
+
+        let path_issues = validate_package_directory(&self.package_directory);
+        issues.extend_from_slice(&path_issues);
+
+        ValidationResult {
+            config_file_path: Some(self.package_directory().clone()),
+            issues: issues.into(),
+        }
     }
 }
 
@@ -56,19 +58,27 @@ pub enum ConfigValidationError {
     InvalidPackageDirectory(String),
 }
 
-fn validate_environment(environment: &str) -> Result<(), ConfigValidationError> {
-    if environment.is_empty() {
-        Err(ConfigValidationError::EmptyField("environment".to_string()))
-    } else {
-        Ok(())
-    }
+fn validate_environment(environment: &str) -> Option<ValidationIssue> {
+    environment.is_empty().then(|| {
+        ValidationIssue::error(
+            ValidationErrorCategory::RequiredField,
+            "environment",
+            "The `environment` field exists, but has no value",
+            Some("Set a value for `environment`. Ex. `environment: macos`"),
+        )
+    })
 }
 
-fn validate_package_directory(package_directory: &Path) -> Result<(), ConfigValidationError> {
+fn validate_package_directory(package_directory: &Path) -> Vec<ValidationIssue> {
+    let mut issues = Vec::new();
+
     if package_directory.as_os_str().is_empty() {
-        return Err(ConfigValidationError::EmptyField(
-            "package_directory".to_string(),
-        ));
+        issues.push(ValidationIssue::error(
+            ValidationErrorCategory::RequiredField,
+            "package_directory",
+            "The `package_directory` field exists, but has no value",
+            Some("Set a value for `package_directory`. Ex. `package_directory: ~/dev/selfie-packages`")
+        ))
     }
 
     // Validate the package directory path
@@ -77,10 +87,13 @@ fn validate_package_directory(package_directory: &Path) -> Result<(), ConfigVali
     let expanded_path = Path::new(expanded_path.as_ref());
 
     if !expanded_path.is_absolute() {
-        return Err(ConfigValidationError::InvalidPackageDirectory(
-            "Package directory must be an absolute path".to_string(),
-        ));
+        issues.push(ValidationIssue::error(
+            ValidationErrorCategory::PathFormat,
+            "package_directory",
+            "The path at `package_directory` exists, but cannot be expanded",
+            Some("If the path is relative, simplify it, otherwise provide an absolute path"),
+        ))
     }
 
-    Ok(())
+    issues
 }
