@@ -1,7 +1,7 @@
 use selfie::{config::AppConfig, progress_reporter::port::ProgressReporter};
 use tracing::info;
 
-use crate::commands::TableReporter;
+use crate::commands::{TableReporter, report_with_style};
 
 pub(crate) fn handle_validate<R: ProgressReporter>(
     original_config: &AppConfig,
@@ -29,7 +29,26 @@ pub(crate) fn handle_validate<R: ProgressReporter>(
             .print();
         0
     } else {
-        reporter.report_success("Package is valid.");
+        reporter.report_success("Configuration is valid.");
+        report_with_style(&reporter, "environment:", original_config.environment());
+        report_with_style(
+            &reporter,
+            "package_directory:",
+            original_config.package_directory().display(),
+        );
+        report_with_style(
+            &reporter,
+            "command_timeout:",
+            format!("{} seconds", original_config.command_timeout().as_secs()),
+        );
+        report_with_style(
+            &reporter,
+            "max_parallel_installations:",
+            original_config.max_parallel_installations().get(),
+        );
+        report_with_style(&reporter, "stop_on_error:", original_config.stop_on_error());
+        report_with_style(&reporter, "verbose:", original_config.verbose());
+        report_with_style(&reporter, "use_colors:", original_config.use_colors());
 
         0
     }

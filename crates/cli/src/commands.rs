@@ -1,7 +1,7 @@
 pub(crate) mod config;
 pub(crate) mod package;
 
-use comfy_table::Table;
+use comfy_table::{Row, Table};
 use selfie::{
     config::AppConfig, progress_reporter::port::ProgressReporter, validation::ValidationIssue,
 };
@@ -135,7 +135,24 @@ impl TableReporter {
         self
     }
 
+    fn add_row<T: Into<Row>>(&mut self, row: T) -> &mut Self {
+        self.table.add_row(row);
+        self
+    }
+
     fn print(&self) {
         eprintln!("{}", &self.table);
     }
+}
+
+fn report_with_style<S: ProgressReporter>(
+    reporter: &S,
+    param1: impl std::fmt::Display,
+    param2: impl std::fmt::Display,
+) {
+    reporter.report(format!(
+        "  {} {}",
+        console::style(param1).italic().dim(),
+        console::style(param2).bold()
+    ));
 }

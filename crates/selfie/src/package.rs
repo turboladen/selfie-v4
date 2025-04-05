@@ -52,6 +52,20 @@ pub struct EnvironmentConfig {
     pub(crate) dependencies: Vec<String>,
 }
 
+impl EnvironmentConfig {
+    pub fn install(&self) -> &str {
+        &self.install
+    }
+
+    pub fn check(&self) -> Option<&str> {
+        self.check.as_deref()
+    }
+
+    pub fn dependencies(&self) -> &[String] {
+        &self.dependencies
+    }
+}
+
 impl Package {
     /// Create a new package with the specified attributes. See `PackageBuilder`.
     #[must_use]
@@ -84,13 +98,13 @@ impl Package {
     }
 
     #[must_use]
-    pub fn homepage(&self) -> Option<&String> {
-        self.homepage.as_ref()
+    pub fn homepage(&self) -> Option<&str> {
+        self.homepage.as_deref()
     }
 
     #[must_use]
-    pub fn description(&self) -> Option<&String> {
-        self.description.as_ref()
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
     }
 
     #[must_use]

@@ -6,7 +6,7 @@ use selfie::{
 };
 use tracing::info;
 
-use crate::commands::TableReporter;
+use crate::commands::{TableReporter, report_with_style};
 
 pub(crate) fn handle_install<R: ProgressReporter>(
     package_name: &str,
@@ -98,6 +98,31 @@ pub(crate) fn handle_validate<R: ProgressReporter>(
                 0
             } else {
                 reporter.report_success("Package is valid.");
+
+                report_with_style(&reporter, "name:", package.name());
+                report_with_style(&reporter, "version:", package.version());
+                report_with_style(
+                    &reporter,
+                    "homepage:",
+                    package.homepage().unwrap_or_default(),
+                );
+                report_with_style(
+                    &reporter,
+                    "description:",
+                    package.description().unwrap_or_default(),
+                );
+                report_with_style(&reporter, "environments:", "");
+
+                for (name, config) in package.environments() {
+                    report_with_style(&reporter, format!("- {name}"), "");
+
+                    let mut env = TableReporter::new();
+                    env.setup(vec!["key", "value"]);
+                    env.add_row(vec!["install", config.install()]);
+                    env.add_row(vec!["check", config.check().unwrap_or_default()]);
+                    env.add_row(vec!["dependencies", &config.dependencies().join(", ")]);
+                    env.print();
+                }
 
                 0
             }

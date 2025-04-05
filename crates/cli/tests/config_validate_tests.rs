@@ -35,9 +35,9 @@ package_directory: "/test/packages"
     let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["config", "validate"]);
 
-    cmd.assert().success().stdout(predicates::str::contains(
-        "Configuration validation successful",
-    ));
+    cmd.assert()
+        .success()
+        .stdout(predicates::str::contains("Configuration is valid"));
 }
 
 #[test]
@@ -71,5 +71,5 @@ package_directory: "relative/path"
 
     cmd.assert()
         .failure()
-        .stderr(predicates::str::contains("must be an absolute path"));
+        .stderr(predicates::str::contains("exists, but cannot be expanded"));
 }
