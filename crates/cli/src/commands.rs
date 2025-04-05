@@ -1,7 +1,11 @@
-use anyhow::Result;
-use console::style;
-use selfie::{config::AppConfig, progress_reporter::port::ProgressReporter};
-use tracing::{debug, info};
+pub(crate) mod config;
+pub(crate) mod package;
+
+use comfy_table::{Row, Table};
+use selfie::{
+    config::AppConfig, progress_reporter::port::ProgressReporter, validation::ValidationIssue,
+};
+use tracing::debug;
 
 use crate::cli::{ClapCommands, ConfigSubcommands, PackageSubcommands};
 
@@ -11,7 +15,7 @@ pub fn dispatch_command<R: ProgressReporter>(
     config: &AppConfig,
     original_config: AppConfig,
     reporter: R,
-) -> Result<()> {
+) -> i32 {
     debug!("Dispatching command: {:?}", command);
 
     match command {
@@ -29,24 +33,23 @@ fn dispatch_package_command<R: ProgressReporter>(
     command: &PackageSubcommands,
     config: &AppConfig,
     reporter: R,
-) -> Result<()> {
+) -> i32 {
     debug!("Handling package command: {:?}", command);
 
     match command {
         PackageSubcommands::Install { package_name } => {
-            handle_package_install(package_name, config, reporter)
+            package::handle_install(package_name, config, reporter)
         }
-        PackageSubcommands::List => handle_package_list(config, reporter),
+        PackageSubcommands::List => package::handle_list(config, reporter),
         PackageSubcommands::Info { package_name } => {
-            handle_package_info(package_name, config, reporter)
+            package::handle_info(package_name, config, reporter)
         }
         PackageSubcommands::Create { package_name } => {
-            handle_package_create(package_name, config, reporter)
+            package::handle_create(package_name, config, reporter)
         }
-        PackageSubcommands::Validate {
-            package_name,
-            package_path,
-        } => handle_package_validate(package_name, package_path.as_ref(), config, reporter),
+        PackageSubcommands::Validate { package_name } => {
+            package::handle_validate(package_name, config, reporter)
+        }
     }
 }
 
@@ -55,137 +58,101 @@ fn dispatch_config_command<R: ProgressReporter>(
     command: &ConfigSubcommands,
     original_config: AppConfig,
     reporter: R,
-) -> Result<()> {
+) -> i32 {
     debug!("Handling config command: {:?}", command);
 
     match command {
-        ConfigSubcommands::Validate => handle_config_validate(&original_config, reporter),
+        ConfigSubcommands::Validate => config::handle_validate(&original_config, reporter),
     }
 }
 
-// Command handler implementations
-
-fn handle_package_install<R: ProgressReporter>(
-    package_name: &str,
-    config: &AppConfig,
-    reporter: R,
-) -> Result<()> {
-    info!("Installing package: {}", package_name);
-
-    // TODO: Implement package installation
-    reporter.report_info(format!(
-        "Package '{}' will be installed in: {}",
-        package_name,
-        config.package_directory().display()
-    ));
-    Ok(())
+struct TableReporter {
+    table: Table,
 }
 
-fn handle_package_list<R: ProgressReporter>(config: &AppConfig, reporter: R) -> Result<()> {
-    info!(
-        "Listing packages from {}",
-        config.package_directory().display()
-    );
-    // TODO: Implement package listing
-    reporter.report_info("Listing packages (not yet implemented)");
-    Ok(())
-}
+impl TableReporter {
+    fn new() -> Self {
+        use comfy_table::Table;
 
-fn handle_package_info<R: ProgressReporter>(
-    package_name: &str,
-    _config: &AppConfig,
-    reporter: R,
-) -> Result<()> {
-    info!("Getting info for package: {}", package_name);
-    // TODO: Implement package info
-    reporter.report_info(format!(
-        "Displaying info for package: {} (not yet implemented)",
-        package_name
-    ));
-    Ok(())
-}
-
-fn handle_package_create<R: ProgressReporter>(
-    package_name: &str,
-    _config: &AppConfig,
-    reporter: R,
-) -> Result<()> {
-    info!("Creating package: {}", package_name);
-    // TODO: Implement package creation
-    reporter.report_info(format!(
-        "Creating package: {} (not yet implemented)",
-        package_name
-    ));
-    Ok(())
-}
-
-fn handle_package_validate<R: ProgressReporter>(
-    package_name: &str,
-    package_path: Option<&std::path::PathBuf>,
-    config: &AppConfig,
-    reporter: R,
-) -> Result<()> {
-    info!("Validating package: {}", package_name);
-
-    if let Some(path) = package_path {
-        reporter.report_info(format!(
-            "Validating package '{}' at path: {}",
-            package_name,
-            path.display()
-        ));
-    } else {
-        reporter.report_info(format!(
-            "Validating package '{}' in environment: {}",
-            package_name,
-            config.environment()
-        ));
-    }
-    // TODO: Implement package validation
-    Ok(())
-}
-
-fn handle_config_validate<R: ProgressReporter>(
-    original_config: &AppConfig,
-    reporter: R,
-) -> Result<()> {
-    fn report_with_style<S: ProgressReporter>(
-        reporter: &S,
-        param1: impl std::fmt::Display,
-        param2: impl std::fmt::Display,
-    ) {
-        reporter.report(format!(
-            "  {} {}",
-            style(param1).italic().dim(),
-            style(param2).bold()
-        ));
-    }
-    info!("Validating configuration");
-
-    match original_config.validate(|msg| reporter.report_info(msg)) {
-        Ok(_) => {
-            reporter.report_success("Configuration validation successful.");
-            report_with_style(&reporter, "environment:", original_config.environment());
-            report_with_style(
-                &reporter,
-                "package_directory:",
-                original_config.package_directory().display(),
-            );
-            report_with_style(
-                &reporter,
-                "command_timeout:",
-                format!("{} seconds", original_config.command_timeout().as_secs()),
-            );
-            report_with_style(
-                &reporter,
-                "max_parallel_installations:",
-                original_config.max_parallel_installations().get(),
-            );
-            report_with_style(&reporter, "stop_on_error:", original_config.stop_on_error());
-            report_with_style(&reporter, "verbose:", original_config.verbose());
-            report_with_style(&reporter, "use_colors:", original_config.use_colors());
+        Self {
+            table: Table::new(),
         }
-        Err(_) => todo!(),
     }
 
-    Ok(())
+    fn setup(&mut self, header: Vec<&'static str>) -> &mut Self {
+        use comfy_table::{
+            ContentArrangement,
+            modifiers::{UTF8_ROUND_CORNERS, UTF8_SOLID_INNER_BORDERS},
+            presets::UTF8_FULL,
+        };
+        self.table
+            .load_preset(UTF8_FULL)
+            .apply_modifier(UTF8_ROUND_CORNERS)
+            .apply_modifier(UTF8_SOLID_INNER_BORDERS)
+            .set_content_arrangement(ContentArrangement::Dynamic)
+            .set_header(header);
+
+        self
+    }
+
+    fn add_errors(
+        &mut self,
+        error_issues: &[&ValidationIssue],
+        reporter: &impl ProgressReporter,
+    ) -> &mut Self {
+        for error in error_issues {
+            self.table.add_row(vec![
+                reporter.format_error(error.category().to_string()),
+                error.field().to_string(),
+                error.message().to_string(),
+                error
+                    .suggestion()
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
+            ]);
+        }
+
+        self
+    }
+
+    fn add_warnings(
+        &mut self,
+        warning_issues: &[&ValidationIssue],
+        reporter: &impl ProgressReporter,
+    ) -> &mut Self {
+        for warning in warning_issues {
+            self.table.add_row(vec![
+                reporter.format_warning(warning.category().to_string()),
+                warning.field().to_string(),
+                warning.message().to_string(),
+                warning
+                    .suggestion()
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
+            ]);
+        }
+
+        self
+    }
+
+    fn add_row<T: Into<Row>>(&mut self, row: T) -> &mut Self {
+        self.table.add_row(row);
+        self
+    }
+
+    fn print(&self) {
+        eprintln!("{}", &self.table);
+    }
+}
+
+fn report_with_style<S: ProgressReporter>(
+    reporter: &S,
+    param1: impl std::fmt::Display,
+    param2: impl std::fmt::Display,
+) {
+    reporter.report(format!(
+        "  {} {}",
+        console::style(param1).italic().dim(),
+        console::style(param2).bold()
+    ));
 }

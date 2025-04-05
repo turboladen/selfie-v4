@@ -57,6 +57,19 @@ impl MockFileSystem {
             .returning(move |_| Ok(content_string.clone()));
     }
 
+    pub(crate) fn mock_list_directory<P>(&mut self, path: P, entries: &[P])
+    where
+        PathBuf: From<P>,
+        P: Clone + Sync,
+    {
+        let dir = PathBuf::from(path);
+        let paths: Vec<_> = entries.iter().cloned().map(|e| PathBuf::from(e)).collect();
+
+        self.expect_list_directory()
+            .with(mockall::predicate::eq(dir.clone()))
+            .returning(move |_| Ok(paths.clone()));
+    }
+
     pub(crate) fn mock_path_exists<P>(&mut self, path: P, exists: bool)
     where
         PathBuf: From<P>,

@@ -258,7 +258,7 @@ mod tests {
                     ConfigLoadError::ConfigError(_) => {
                         // Expected error type
                     }
-                    _ => panic!("Expected ConfigError, got: {:?}", err),
+                    _ => panic!("Expected ConfigError, got: {err:?}"),
                 }
             }
         }
@@ -285,7 +285,7 @@ mod tests {
                     ConfigLoadError::ConfigError(_) => {
                         // Expected error type for missing fields
                     }
-                    _ => panic!("Expected ConfigError, got: {:?}", err),
+                    _ => panic!("Expected ConfigError, got: {err:?}"),
                 }
             }
         }
