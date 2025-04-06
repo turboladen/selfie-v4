@@ -33,8 +33,8 @@
 - [x] Add package domain
 - [x] Add YAML package file loader
 - [x] Add running `package validate [name]`
+- [x] Add running `package list`
 - [ ] Add running `package info [name]`
-- [ ] Add running `package list`
 
 ### Phase 4: Package Installation
 

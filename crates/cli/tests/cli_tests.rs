@@ -139,6 +139,14 @@ fn test_cli_config_validate() {
 #[test]
 fn test_cli_package_list() {
     let temp_dir = setup_test_config();
+    let package = PackageBuilder::default()
+        .name("test-package")
+        .version("0.1.0")
+        .environment(SELFIE_ENV, |builder| builder.install("echo 'hi'"))
+        .build();
+
+    add_package(&temp_dir, &package);
+
     let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["package", "list"]);
     cmd.assert().success();

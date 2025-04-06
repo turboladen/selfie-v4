@@ -48,7 +48,10 @@ environments:
     assert_eq!(result.valid_packages().count(), 2);
 
     // Verify package names
-    let names: Vec<&str> = result.valid_packages().map(|p| p.name()).collect();
+    let names: Vec<&str> = result
+        .valid_packages()
+        .map(selfie::package::Package::name)
+        .collect();
     assert!(names.contains(&"package1"));
     assert!(names.contains(&"package2"));
 }

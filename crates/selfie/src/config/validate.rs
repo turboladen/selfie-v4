@@ -32,6 +32,7 @@ impl ValidationResult {
 impl AppConfig {
     /// Full validation for the `AppConfig`
     ///
+    #[must_use]
     pub fn validate(&self) -> ValidationResult {
         let mut issues = Vec::new();
 
@@ -78,7 +79,7 @@ fn validate_package_directory(package_directory: &Path) -> Vec<ValidationIssue> 
             "package_directory",
             "The `package_directory` field exists, but has no value",
             Some("Set a value for `package_directory`. Ex. `package_directory: ~/dev/selfie-packages`")
-        ))
+        ));
     }
 
     // Validate the package directory path
@@ -92,7 +93,7 @@ fn validate_package_directory(package_directory: &Path) -> Vec<ValidationIssue> 
             "package_directory",
             "The path at `package_directory` exists, but cannot be expanded",
             Some("If the path is relative, simplify it, otherwise provide an absolute path"),
-        ))
+        ));
     }
 
     issues

@@ -1,7 +1,7 @@
 use selfie::{config::AppConfig, progress_reporter::port::ProgressReporter};
 use tracing::info;
 
-use crate::commands::{TableReporter, report_with_style};
+use crate::{commands::report_with_style, tables::ValidationTableReporter};
 
 pub(crate) fn handle_validate<R: ProgressReporter>(
     original_config: &AppConfig,
@@ -14,18 +14,18 @@ pub(crate) fn handle_validate<R: ProgressReporter>(
     if result.issues().has_errors() {
         reporter.report_error("Validation failed.");
 
-        let mut table_reporter = TableReporter::new();
+        let mut table_reporter = ValidationTableReporter::new();
         table_reporter
             .setup(vec!["Category", "Field", "Message", "Suggestion"])
-            .add_errors(&result.issues().errors(), &reporter)
-            .add_warnings(&result.issues().warnings(), &reporter)
+            .add_validation_errors(&result.issues().errors(), &reporter)
+            .add_validation_warnings(&result.issues().warnings(), &reporter)
             .print();
         1
     } else if result.issues().has_warnings() {
-        let mut table_reporter = TableReporter::new();
+        let mut table_reporter = ValidationTableReporter::new();
         table_reporter
             .setup(vec!["Category", "Field", "Message", "Suggestion"])
-            .add_warnings(&result.issues().warnings(), &reporter)
+            .add_validation_warnings(&result.issues().warnings(), &reporter)
             .print();
         0
     } else {

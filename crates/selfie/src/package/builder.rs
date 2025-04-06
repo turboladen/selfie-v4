@@ -87,11 +87,13 @@ impl EnvironmentConfigBuilder {
         self
     }
 
+    #[must_use]
     pub fn dependencies<T: ToString>(mut self, dependencies: Vec<T>) -> Self {
         self.dependencies = dependencies.into_iter().map(|d| d.to_string()).collect();
         self
     }
 
+    #[must_use]
     pub fn build(self) -> EnvironmentConfig {
         EnvironmentConfig {
             install: self.install,
