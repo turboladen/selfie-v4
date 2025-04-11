@@ -47,9 +47,16 @@ impl<'a, F: FileSystem> YamlPackageRepository<'a, F> {
         let content = self
             .fs
             .read_file(path)
-            .map_err(|e| PackageParseError::FileSystemError(e.to_string()))?;
+            .map_err(|e| PackageParseError::FileSystemError {
+                package_path: path.to_path_buf(),
+                source_message: e.to_string(),
+            })?;
 
-        let mut package: Package = serde_yaml::from_str(&content)?;
+        let mut package: Package =
+            serde_yaml::from_str(&content).map_err(|e| PackageParseError::YamlParse {
+                package_path: path.to_path_buf(),
+                source: e,
+            })?;
         package.path = path.to_path_buf();
 
         Ok(package)

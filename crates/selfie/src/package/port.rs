@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::package::Package;
@@ -58,11 +58,12 @@ impl ListPackagesOutput {
         self.0.is_empty()
     }
 
+    pub fn all_results(&self) -> &[Result<Package, PackageParseError>] {
+        &self.0
+    }
+
     pub fn valid_packages(&self) -> impl Iterator<Item = &Package> {
-        self.0.iter().filter_map(|maybe_p| match maybe_p {
-            Ok(p) => Some(p),
-            Err(_) => None,
-        })
+        self.0.iter().filter_map(|maybe_p| maybe_p.as_ref().ok())
     }
 
     #[must_use]
@@ -80,22 +81,41 @@ impl ListPackagesOutput {
     }
 
     pub fn invalid_packages(&self) -> impl Iterator<Item = &PackageParseError> {
-        self.0.iter().filter_map(|maybe_p| match maybe_p {
-            Ok(_) => None,
-            Err(e) => Some(e),
-        })
+        self.0.iter().filter_map(|maybe_p| maybe_p.as_ref().err())
     }
 }
 
 /// Errors related to package parsing
 #[derive(Error, Debug)]
 pub enum PackageParseError {
-    #[error("YAML parsing error: {0}")]
-    YamlParse(#[from] serde_yaml::Error),
+    #[error("YAML parsing error reading package file `{}`: {source}", package_path.display())]
+    YamlParse {
+        package_path: PathBuf,
+        #[source]
+        source: serde_yaml::Error,
+    },
 
-    #[error("I/O error: {0}")]
-    IoError(#[from] std::io::Error),
+    #[error("I/O error reading package file `{}`: {source}", package_path.display())]
+    IoError {
+        package_path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 
-    #[error("File system error: {0}")]
-    FileSystemError(String),
+    #[error("File system error reading package file `{}`: {source_message}", package_path.display())]
+    FileSystemError {
+        package_path: PathBuf,
+        source_message: String,
+    },
+}
+
+impl PackageParseError {
+    #[must_use]
+    pub fn package_path(&self) -> &Path {
+        match self {
+            PackageParseError::YamlParse { package_path, .. } => package_path,
+            PackageParseError::IoError { package_path, .. } => package_path,
+            PackageParseError::FileSystemError { package_path, .. } => package_path,
+        }
+    }
 }

@@ -1,3 +1,6 @@
+use std::fmt::Display;
+
+use console::style;
 use selfie::{
     config::AppConfig,
     fs::real::RealFileSystem,
@@ -6,7 +9,10 @@ use selfie::{
 };
 use tracing::info;
 
-use crate::commands::{TableReporter, report_with_style};
+use crate::{
+    commands::report_with_style,
+    tables::{PackageListTableReporter, ValidationTableReporter},
+};
 
 pub(crate) fn handle_install<R: ProgressReporter>(
     package_name: &str,
@@ -25,13 +31,82 @@ pub(crate) fn handle_install<R: ProgressReporter>(
 }
 
 pub(crate) fn handle_list<R: ProgressReporter>(config: &AppConfig, reporter: R) -> i32 {
-    info!(
-        "Listing packages from {}",
-        config.package_directory().display()
-    );
-    // TODO: Implement package listing
-    reporter.report_info("Listing packages (not yet implemented)");
-    0
+    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory());
+
+    match repo.list_packages() {
+        Ok(list_packages_output) => {
+            let mut sorted_errors: Vec<_> = list_packages_output.invalid_packages().collect();
+            sorted_errors.sort_by(|a, b| a.package_path().cmp(b.package_path()));
+
+            let mut sorted_packages: Vec<_> = list_packages_output.valid_packages().collect();
+            sorted_packages.sort_by(|a, b| a.name().cmp(b.name()));
+
+            if sorted_packages.is_empty() {
+                reporter.report_info("No packages found.");
+
+                for error in sorted_errors {
+                    reporter.report_error(format!("{}: {}", error.package_path().display(), error));
+                }
+
+                return 0;
+            }
+
+            let mut package_reporter = PackageListTableReporter::new();
+            package_reporter.setup(vec!["Name", "Version", "Environments"]);
+
+            for package in sorted_packages {
+                let package_name = if config.use_colors() {
+                    style(package.name()).magenta().bold().to_string()
+                } else {
+                    package.name().to_string()
+                };
+
+                let version = if config.use_colors() {
+                    style(format!("v{}", package.version())).dim().to_string()
+                } else {
+                    format!("v{}", package.version())
+                };
+
+                package_reporter.add_row(vec![
+                    package_name,
+                    version,
+                    package
+                        .environments()
+                        .keys()
+                        .map(|env_name| {
+                            if env_name == config.environment() {
+                                let env = format!("*{env_name}");
+
+                                if config.use_colors() {
+                                    style(env).bold().green().to_string()
+                                } else {
+                                    env
+                                }
+                            } else if config.use_colors() {
+                                style(env_name).dim().green().to_string()
+                            } else {
+                                env_name.to_string()
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(",  "),
+                ]);
+            }
+
+            package_reporter.print();
+
+            for error in sorted_errors {
+                reporter.report_error(format!("{}: {}", error.package_path().display(), error));
+            }
+
+            0
+        }
+        Err(error) => {
+            reporter.report_error(error);
+
+            1
+        }
+    }
 }
 
 pub(crate) fn handle_info<R: ProgressReporter>(
@@ -65,6 +140,13 @@ pub(crate) fn handle_validate<R: ProgressReporter>(
     config: &AppConfig,
     reporter: R,
 ) -> i32 {
+    fn format_table_key<T: Display>(key: T, use_colors: bool) -> String {
+        if use_colors {
+            style(key).magenta().bold().to_string()
+        } else {
+            key.to_string()
+        }
+    }
     info!("Validating package: {}", package_name);
 
     reporter.report_info(format!(
@@ -82,18 +164,18 @@ pub(crate) fn handle_validate<R: ProgressReporter>(
             if validation_result.issues().has_errors() {
                 reporter.report_error("Validation failed.");
 
-                let mut table_reporter = TableReporter::new();
+                let mut table_reporter = ValidationTableReporter::new();
                 table_reporter
                     .setup(vec!["Category", "Field", "Message", "Suggestion"])
-                    .add_errors(&validation_result.issues().errors(), &reporter)
-                    .add_warnings(&validation_result.issues().warnings(), &reporter)
+                    .add_validation_errors(&validation_result.issues().errors(), &reporter)
+                    .add_validation_warnings(&validation_result.issues().warnings(), &reporter)
                     .print();
                 1
             } else if validation_result.issues().has_warnings() {
-                let mut table_reporter = TableReporter::new();
+                let mut table_reporter = ValidationTableReporter::new();
                 table_reporter
                     .setup(vec!["Category", "Field", "Message", "Suggestion"])
-                    .add_warnings(&validation_result.issues().warnings(), &reporter)
+                    .add_validation_warnings(&validation_result.issues().warnings(), &reporter)
                     .print();
                 0
             } else {
@@ -113,15 +195,23 @@ pub(crate) fn handle_validate<R: ProgressReporter>(
                 );
                 report_with_style(&reporter, "environments:", "");
 
-                for (name, config) in package.environments() {
+                for (name, env_config) in package.environments() {
                     report_with_style(&reporter, format!("- {name}"), "");
 
-                    let mut env = TableReporter::new();
-                    env.setup(vec!["key", "value"]);
-                    env.add_row(vec!["install", config.install()]);
-                    env.add_row(vec!["check", config.check().unwrap_or_default()]);
-                    env.add_row(vec!["dependencies", &config.dependencies().join(", ")]);
-                    env.print();
+                    let mut env_table = ValidationTableReporter::new();
+                    env_table.setup(vec!["Key", "Value"]);
+
+                    let install_key = format_table_key("install", config.use_colors());
+                    let check_key = format_table_key("check", config.use_colors());
+                    let dependencies_key = format_table_key("dependencies", config.use_colors());
+
+                    env_table.add_row(vec![&install_key, env_config.install()]);
+                    env_table.add_row(vec![&check_key, env_config.check().unwrap_or_default()]);
+                    env_table.add_row(vec![
+                        &dependencies_key,
+                        &env_config.dependencies().join(", "),
+                    ]);
+                    env_table.print();
                 }
 
                 0

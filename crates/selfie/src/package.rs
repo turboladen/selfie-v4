@@ -3,7 +3,7 @@ pub mod port;
 pub mod repository;
 pub mod validate;
 
-pub use self::builder::PackageBuilder;
+pub use self::builder::{EnvironmentConfigBuilder, PackageBuilder};
 
 // Core package entity and related types
 use std::{collections::HashMap, path::PathBuf};
@@ -53,14 +53,17 @@ pub struct EnvironmentConfig {
 }
 
 impl EnvironmentConfig {
+    #[must_use]
     pub fn install(&self) -> &str {
         &self.install
     }
 
+    #[must_use]
     pub fn check(&self) -> Option<&str> {
         self.check.as_deref()
     }
 
+    #[must_use]
     pub fn dependencies(&self) -> &[String] {
         &self.dependencies
     }
