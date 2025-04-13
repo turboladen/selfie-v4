@@ -26,7 +26,7 @@ impl TerminalProgressReporter {
 }
 
 impl ProgressReporter for TerminalProgressReporter {
-    fn status_line<T: Display + 'static>(
+    fn status_line<T: Display>(
         &self,
         message_type: super::port::MessageType,
         message: T,
@@ -54,31 +54,31 @@ impl ProgressReporter for TerminalProgressReporter {
         format!("{prefix}{formatted_message}")
     }
 
-    fn format<T: Display + 'static>(&self, message: T) -> String {
+    fn format<T: Display>(&self, message: T) -> String {
         message.to_string()
     }
 
-    fn report<T: Display + 'static>(&self, message: T) {
+    fn report<T: Display>(&self, message: T) {
         println!("{}", self.format(message));
     }
 
-    fn report_progress<T: Display + 'static>(&self, message: T) {
+    fn report_progress<T: Display>(&self, message: T) {
         println!("{}", self.format_progress(message));
     }
 
-    fn report_success<T: Display + 'static>(&self, message: T) {
+    fn report_success<T: Display>(&self, message: T) {
         println!("{}", self.format_success(message));
     }
 
-    fn report_info<T: Display + 'static>(&self, message: T) {
+    fn report_info<T: Display>(&self, message: T) {
         println!("{}", self.format_info(message));
     }
 
-    fn report_warning<T: Display + 'static>(&self, message: T) {
+    fn report_warning<T: Display>(&self, message: T) {
         println!("{}", self.format_warning(message));
     }
 
-    fn report_error<T: Display + 'static>(&self, message: T) {
+    fn report_error<T: Display>(&self, message: T) {
         eprintln!("{}", self.format_error(message));
     }
 }

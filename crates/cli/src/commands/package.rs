@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use comfy_table::{ContentArrangement, Table, modifiers, presets};
 use console::style;
 use selfie::{
     config::AppConfig,
@@ -111,15 +112,204 @@ pub(crate) fn handle_list<R: ProgressReporter>(config: &AppConfig, reporter: R) 
 
 pub(crate) fn handle_info<R: ProgressReporter>(
     package_name: &str,
-    _config: &AppConfig,
+    config: &AppConfig,
     reporter: R,
 ) -> i32 {
-    info!("Getting info for package: {}", package_name);
-    // TODO: Implement package info
-    reporter.report_info(format!(
-        "Displaying info for package: {package_name} (not yet implemented)"
-    ));
-    0
+    tracing::debug!("Finding package info for: {}", package_name);
+
+    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory());
+
+    match repo.get_package(package_name) {
+        Ok(package) => {
+            // Create main table for package metadata
+            let mut table = Table::new();
+
+            table
+                .load_preset(presets::UTF8_FULL_CONDENSED)
+                .apply_modifier(modifiers::UTF8_ROUND_CORNERS)
+                .set_content_arrangement(ContentArrangement::Dynamic);
+
+            // Helper function for formatting field names in the left column
+            let format_field = |name: &str| -> String {
+                if config.use_colors() {
+                    style(name).bold().cyan().to_string()
+                } else {
+                    style(name).bold().to_string()
+                }
+            };
+
+            // Helper function for formatting values in the right column
+            let format_value = |value: &str| -> String {
+                if config.use_colors() {
+                    style(value).white().to_string()
+                } else {
+                    value.to_string()
+                }
+            };
+
+            // Add the basic package info rows
+            table.add_row(vec![format_field("Name"), format_value(package.name())]);
+            table.add_row(vec![
+                format_field("Version"),
+                format_value(package.version()),
+            ]);
+
+            if let Some(desc) = package.description() {
+                table.add_row(vec![format_field("Description"), format_value(desc)]);
+            }
+
+            if let Some(homepage) = package.homepage() {
+                table.add_row(vec![
+                    format_field("Homepage"),
+                    if config.use_colors() {
+                        style(homepage).underlined().blue().to_string()
+                    } else {
+                        homepage.to_string()
+                    },
+                ]);
+            }
+
+            // Format the environment names as a comma-separated list
+            let env_names = package
+                .environments()
+                .keys()
+                .map(|name| {
+                    if name == config.environment() {
+                        if config.use_colors() {
+                            format!("{}", style(format!("*{}", name)).green().bold())
+                        } else {
+                            format!("*{}", name)
+                        }
+                    } else {
+                        name.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            // Add environments row with list of environment names
+            table.add_row(vec![format_field("Environments"), format_value(&env_names)]);
+
+            // Print the main table
+            println!("{table}");
+
+            println!(); // Space between tables
+
+            // For each environment, create a separate table with header
+            for (env_name, env_config) in package.environments() {
+                // Create environment details table
+                let mut env_table = Table::new();
+                env_table
+                    .load_preset(presets::UTF8_FULL_CONDENSED)
+                    .apply_modifier(modifiers::UTF8_ROUND_CORNERS)
+                    .set_content_arrangement(ContentArrangement::Dynamic);
+
+                // Create a header for the environment table
+                let env_header = if env_name == config.environment() {
+                    if config.use_colors() {
+                        style(format!("Environment: *{}", env_name))
+                            .bold()
+                            .green()
+                            .to_string()
+                    } else {
+                        format!("Environment: *{}", env_name)
+                    }
+                } else {
+                    if config.use_colors() {
+                        style(format!("Environment: {}", env_name))
+                            .bold()
+                            .to_string()
+                    } else {
+                        format!("Environment: {}", env_name)
+                    }
+                };
+
+                // Add a header row
+                env_table.set_header(vec![env_header, String::new()]);
+
+                // Format environment detail keys
+                let format_env_key = |key: &str| -> String {
+                    if config.use_colors() {
+                        style(key).magenta().to_string()
+                    } else {
+                        key.to_string()
+                    }
+                };
+
+                // Add environment detail rows
+                env_table.add_row(vec![
+                    format_env_key("Install"),
+                    format_value(env_config.install()),
+                ]);
+
+                if let Some(check) = env_config.check() {
+                    env_table.add_row(vec![format_env_key("Check"), format_value(check)]);
+                }
+
+                if !env_config.dependencies().is_empty() {
+                    env_table.add_row(vec![
+                        format_env_key("Dependencies"),
+                        format_value(&env_config.dependencies().join(", ")),
+                    ]);
+                }
+
+                // Print the environment details table
+                println!("{}", env_table);
+                println!(); // Add space between environment tables
+            }
+
+            0
+        }
+        Err(e) => {
+            let msg = format!("✗ Package `{package_name}` Not Found");
+
+            // Format the error header
+            let error_header = if config.use_colors() {
+                style(msg).red().bold().to_string()
+            } else {
+                msg
+            };
+
+            // Print the error header
+            println!("\n{}", error_header);
+
+            // Print where we looked
+            println!("Searched in: {}", config.package_directory().display());
+
+            // Try to find similar package names to suggest
+            if let Ok(repo_output) = repo.list_packages() {
+                let available_packages: Vec<&str> =
+                    repo_output.valid_packages().map(|p| p.name()).collect();
+
+                if !available_packages.is_empty() {
+                    // Add available packages information
+                    if available_packages.len() <= 5 {
+                        println!("Available packages: {}", available_packages.join(", "));
+                    } else {
+                        println!(
+                            "Available packages: {}, and {} more...",
+                            available_packages[..5].join(", "),
+                            available_packages.len() - 5
+                        );
+                    }
+                }
+            }
+
+            // Add help with suggestion
+            let help_title = if config.use_colors() {
+                style("Suggestion:").yellow().bold().to_string()
+            } else {
+                "Suggestion:".to_string()
+            };
+
+            println!(
+                "{} Run 'selfie package list' to see all available packages",
+                help_title
+            );
+
+            1
+        }
+    }
 }
 
 pub(crate) fn handle_create<R: ProgressReporter>(

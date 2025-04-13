@@ -34,7 +34,7 @@
 - [x] Add YAML package file loader
 - [x] Add running `package validate [name]`
 - [x] Add running `package list`
-- [ ] Add running `package info [name]`
+- [x] Add running `package info [name]`
 
 ### Phase 4: Package Installation
 
