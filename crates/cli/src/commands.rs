@@ -7,7 +7,7 @@ use tracing::debug;
 use crate::cli::{ClapCommands, ConfigSubcommands, PackageSubcommands};
 
 /// Primary command dispatcher that routes to the appropriate command handler
-pub fn dispatch_command<R: ProgressReporter>(
+pub(crate) async fn dispatch_command<R: ProgressReporter>(
     command: &ClapCommands,
     config: &AppConfig,
     original_config: AppConfig,
@@ -17,7 +17,7 @@ pub fn dispatch_command<R: ProgressReporter>(
 
     match command {
         ClapCommands::Package(package_cmd) => {
-            dispatch_package_command(&package_cmd.command, config, reporter)
+            dispatch_package_command(&package_cmd.command, config, reporter).await
         }
         ClapCommands::Config(config_cmd) => {
             dispatch_config_command(&config_cmd.command, original_config, reporter)
@@ -26,7 +26,7 @@ pub fn dispatch_command<R: ProgressReporter>(
 }
 
 /// Handle package management commands
-fn dispatch_package_command<R: ProgressReporter>(
+async fn dispatch_package_command<R: ProgressReporter>(
     command: &PackageSubcommands,
     config: &AppConfig,
     reporter: R,
@@ -39,7 +39,7 @@ fn dispatch_package_command<R: ProgressReporter>(
         }
         PackageSubcommands::List => package::handle_list(config, reporter),
         PackageSubcommands::Info { package_name } => {
-            package::handle_info(package_name, config, reporter)
+            package::handle_info(package_name, config, reporter).await
         }
         PackageSubcommands::Create { package_name } => {
             package::handle_create(package_name, config, reporter)

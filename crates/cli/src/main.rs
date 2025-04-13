@@ -7,7 +7,6 @@ use std::process;
 
 use clap::Parser;
 use selfie::{
-    commands::ShellCommandRunner,
     config::{
         YamlLoader,
         loader::{ApplyToConfg, ConfigLoader},
@@ -19,7 +18,8 @@ use tracing::debug;
 
 use crate::{cli::ClapCli, commands::dispatch_command};
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     let args = ClapCli::parse();
@@ -39,13 +39,10 @@ fn main() -> anyhow::Result<()> {
 
     debug!("Final config: {:#?}", &config);
 
-    // 3. Create command runner for use by commands that need to execute external programs
-    let runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
     let reporter = TerminalProgressReporter::new(config.use_colors());
-    // TODO: Pass runner to commands that need it
 
-    // 4. Dispatch and execute the requested command
-    let exit_code = dispatch_command(&args.command, &config, original_config, reporter);
+    // 3. Dispatch and execute the requested command
+    let exit_code = dispatch_command(&args.command, &config, original_config, reporter).await;
 
     process::exit(exit_code)
 }
