@@ -1,61 +1,10 @@
-// crates/cli/tests/cli_tests.rs
+pub mod common;
 
-use assert_cmd::Command;
+use common::{
+    SELFIE_ENV, add_package, get_command, get_command_with_test_config, setup_default_test_config,
+};
 use predicates::prelude::*;
-use selfie::package::{Package, PackageBuilder};
-use std::{fs, io::Write};
-use tempfile::TempDir;
-
-const SELFIE_ENV: &str = "test-env";
-
-// Helper to create a temporary config environment
-fn setup_test_config() -> TempDir {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let config_dir = temp_dir.path().join(".config").join("selfie");
-    fs::create_dir_all(&config_dir).unwrap();
-
-    let config_path = config_dir.join("config.yaml");
-    let mut config_file = fs::File::create(&config_path).unwrap();
-
-    // Write minimal valid config
-    writeln!(config_file, "environment: {SELFIE_ENV}").unwrap();
-    writeln!(
-        config_file,
-        "package_directory: {}",
-        temp_dir.path().join("packages").display()
-    )
-    .unwrap();
-
-    temp_dir
-}
-
-fn add_package(base_dir: &TempDir, package: &Package) {
-    let yaml = serde_yaml::to_string(package).unwrap();
-    let packages_path = base_dir.path().join("packages");
-    fs::create_dir_all(&packages_path).unwrap();
-    let package_path = packages_path.join(format!("{}.yaml", package.name()));
-
-    fs::write(package_path, yaml).unwrap();
-}
-
-// Helper function to get a command instance with environment variables pointing to our test config
-fn get_command_with_test_config(temp_dir: &TempDir) -> Command {
-    let mut cmd = Command::cargo_bin("selfie-cli").unwrap();
-
-    // Override the config directory location
-    // This assumes we can add a CLI flag or env var to override the config directory
-    cmd.env(
-        "SELFIE_CONFIG_DIR",
-        temp_dir.path().join(".config").join("selfie"),
-    );
-
-    cmd
-}
-
-// Helper function to get a command instance
-fn get_command() -> Command {
-    Command::cargo_bin("selfie-cli").unwrap()
-}
+use selfie::package::PackageBuilder;
 
 #[test]
 fn test_cli_help() {
@@ -119,7 +68,7 @@ fn test_cli_verbose_flag() {
 
 #[test]
 fn test_cli_no_color() {
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
     let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["--no-color", "config", "validate"]);
     cmd.assert().success();
@@ -130,7 +79,7 @@ fn test_cli_no_color() {
 
 #[test]
 fn test_cli_config_validate() {
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
     let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["config", "validate"]);
     cmd.assert().success();
@@ -138,7 +87,7 @@ fn test_cli_config_validate() {
 
 #[test]
 fn test_cli_package_list() {
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
     let package = PackageBuilder::default()
         .name("test-package")
         .version("0.1.0")
@@ -154,7 +103,15 @@ fn test_cli_package_list() {
 
 #[test]
 fn test_cli_package_info() {
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
+    let package = PackageBuilder::default()
+        .name("test-package")
+        .version("0.1.0")
+        .environment(SELFIE_ENV, |builder| builder.install("echo 'hi'"))
+        .build();
+
+    add_package(&temp_dir, &package);
+
     let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["package", "info", "test-package"]);
     cmd.assert().success();
@@ -162,7 +119,7 @@ fn test_cli_package_info() {
 
 #[test]
 fn test_cli_package_install() {
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
     let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["package", "install", "test-package"]);
     cmd.assert().success();
@@ -170,7 +127,7 @@ fn test_cli_package_install() {
 
 #[test]
 fn test_cli_package_create() {
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
     let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["package", "create", "test-package"]);
     cmd.assert().success();
@@ -178,7 +135,7 @@ fn test_cli_package_create() {
 
 #[test]
 fn test_cli_package_validate() {
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
 
     let package = PackageBuilder::default()
         .name("test-package")

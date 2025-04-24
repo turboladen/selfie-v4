@@ -36,6 +36,14 @@
 - [x] Add running `package list`
 - [x] Add running `package info [name]`
 
+#### 3.1 Package Improvements
+
+- [x] Look to add error types that are specific to package commands
+  - Consider error handling in the CLI, where `PackageRepoError` variants feel a
+    bit strange depending on the command.
+- [x] Move the `Reporter` stuff out of the `selfie` crate--this should be the
+      job of the UI.
+
 ### Phase 4: Package Installation
 
 - [ ] Add running `package install`

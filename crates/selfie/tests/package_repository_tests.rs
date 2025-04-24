@@ -1,7 +1,15 @@
-use selfie::fs::real::RealFileSystem;
-use selfie::package::{port::PackageRepository, repository::YamlPackageRepository};
-use std::fs::{self, File};
-use std::io::Write;
+use std::{
+    fs::{self, File},
+    io::Write,
+};
+
+use selfie::{
+    fs::real::RealFileSystem,
+    package::{
+        port::{PackageError, PackageRepository},
+        repository::YamlPackageRepository,
+    },
+};
 use tempfile::tempdir;
 
 #[test]
@@ -87,6 +95,8 @@ environments:
     // Should return an error about multiple packages
     assert!(matches!(
         result,
-        Err(selfie::package::port::PackageRepoError::MultiplePackagesFound(_))
+        Err(selfie::package::port::PackageRepoError::PackageError(
+            PackageError::MultiplePackagesFound { .. }
+        ))
     ));
 }

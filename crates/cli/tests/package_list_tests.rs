@@ -1,60 +1,17 @@
-use assert_cmd::Command;
+pub mod common;
+
+use std::fs;
+
+use common::{add_package, get_command_with_test_config, setup_default_test_config};
 use predicates::prelude::*;
-use selfie::package::{Package, PackageBuilder};
-use std::{fs, io::Write};
-use tempfile::TempDir;
+use selfie::package::PackageBuilder;
 
 const SELFIE_ENV: &str = "test-env";
-
-// Helper to create a temporary config environment
-fn setup_test_config() -> TempDir {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let config_dir = temp_dir.path().join(".config").join("selfie");
-    fs::create_dir_all(&config_dir).unwrap();
-
-    let config_path = config_dir.join("config.yaml");
-    let mut config_file = fs::File::create(&config_path).unwrap();
-
-    // Write minimal valid config
-    writeln!(config_file, "environment: {SELFIE_ENV}").unwrap();
-    writeln!(
-        config_file,
-        "package_directory: {}",
-        temp_dir.path().join("packages").display()
-    )
-    .unwrap();
-
-    temp_dir
-}
-
-// Helper to create YAML packages in the packages directory
-fn add_package(temp_dir: &TempDir, package: &Package) {
-    let packages_dir = temp_dir.path().join("packages");
-    fs::create_dir_all(&packages_dir).unwrap();
-
-    let package_path = packages_dir.join(format!("{}.yaml", package.name()));
-    let yaml = serde_yaml::to_string(package).unwrap();
-
-    fs::write(package_path, yaml).unwrap();
-}
-
-// Helper function to get a command instance with environment variables pointing to our test config
-fn get_command_with_test_config(temp_dir: &TempDir) -> Command {
-    let mut cmd = Command::cargo_bin("selfie-cli").unwrap();
-
-    // Override the config directory location
-    cmd.env(
-        "SELFIE_CONFIG_DIR",
-        temp_dir.path().join(".config").join("selfie"),
-    );
-
-    cmd
-}
 
 #[test]
 fn test_package_list_empty() {
     // Test with no packages
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
     let packages_dir = temp_dir.path().join("packages");
     fs::create_dir_all(&packages_dir).unwrap();
 
@@ -69,7 +26,7 @@ fn test_package_list_empty() {
 
 #[test]
 fn test_package_list_single_package() {
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
 
     // Create a single package
     let package = PackageBuilder::default()
@@ -91,7 +48,7 @@ fn test_package_list_single_package() {
 
 #[test]
 fn test_package_list_multiple_packages() {
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
 
     // Create multiple packages
     let packages = vec![
@@ -132,7 +89,7 @@ fn test_package_list_multiple_packages() {
 
 #[test]
 fn test_package_list_with_invalid_yaml() {
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
 
     // Create a valid package
     let package = PackageBuilder::default()
@@ -166,7 +123,7 @@ fn test_package_list_with_invalid_yaml() {
 
 #[test]
 fn test_package_list_different_environments() {
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
 
     // Create packages with different environment configurations
     let packages = vec![
@@ -216,7 +173,7 @@ fn test_package_list_different_environments() {
 
 #[test]
 fn test_package_list_with_no_color_flag() {
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
 
     let package = PackageBuilder::default()
         .name("test-package")
@@ -237,12 +194,12 @@ fn test_package_list_with_no_color_flag() {
 
 #[test]
 fn test_package_list_non_existent_directory() {
-    let temp_dir = setup_test_config();
+    let temp_dir = setup_default_test_config();
 
     // Remove the packages directory that was created
     let packages_dir = temp_dir.path().join("packages");
-    // fs::remove_dir_all(&packages_dir).unwrap();
-    fs::remove_dir_all(&packages_dir).ok();
+    fs::remove_dir_all(&packages_dir).unwrap();
+    // fs::remove_dir_all(&packages_dir).ok();
 
     let mut cmd = get_command_with_test_config(&temp_dir);
     cmd.args(["package", "list"]);
@@ -250,5 +207,5 @@ fn test_package_list_non_existent_directory() {
     // Should fail with appropriate error about missing directory
     cmd.assert()
         .failure()
-        .stderr(predicate::str::contains("Directory does not exist"));
+        .stderr(predicate::str::contains("Package Directory Not Found"));
 }

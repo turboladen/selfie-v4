@@ -4,7 +4,10 @@ use crate::{
     fs::FileSystem,
     package::{
         Package,
-        port::{ListPackagesOutput, PackageParseError, PackageRepoError, PackageRepository},
+        port::{
+            ListPackagesOutput, PackageError, PackageListError, PackageParseError,
+            PackageRepoError, PackageRepository,
+        },
     },
 };
 
@@ -68,31 +71,37 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<'_, F> {
         let package_files = self.find_package_files(name)?;
 
         if package_files.is_empty() {
-            return Err(PackageRepoError::PackageNotFound {
+            return Err(PackageError::PackageNotFound {
                 name: name.to_string(),
                 packages_path: self.package_dir.to_path_buf(),
-            });
+            }
+            .into());
         }
 
         if package_files.len() > 1 {
-            return Err(PackageRepoError::MultiplePackagesFound(name.to_string()));
+            return Err(PackageError::MultiplePackagesFound {
+                name: name.to_string(),
+                packages_path: self.package_dir.to_path_buf(),
+            }
+            .into());
         }
 
         let package_file = &package_files[0];
-        let package = self.load_package_from_file(package_file).map_err(|e| {
-            PackageRepoError::ParseError {
-                source: e,
+        let package = self
+            .load_package_from_file(package_file)
+            .map_err(|source| PackageError::ParseError {
+                name: name.to_string(),
                 packages_path: self.package_dir.to_path_buf(),
-            }
-        })?;
+                source,
+            })?;
 
         Ok(package)
     }
 
-    fn list_packages(&self) -> Result<ListPackagesOutput, PackageRepoError> {
+    fn list_packages(&self) -> Result<ListPackagesOutput, PackageListError> {
         if !self.fs.path_exists(self.package_dir) {
-            return Err(PackageRepoError::DirectoryNotFound(
-                self.package_dir.to_string_lossy().into_owned(),
+            return Err(PackageListError::PackageDirectoryNotFound(
+                self.package_dir.to_path_buf(),
             ));
         }
 
@@ -109,10 +118,10 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<'_, F> {
         Ok(ListPackagesOutput(packages))
     }
 
-    fn find_package_files(&self, name: &str) -> Result<Vec<PathBuf>, PackageRepoError> {
+    fn find_package_files(&self, name: &str) -> Result<Vec<PathBuf>, PackageListError> {
         if !self.fs.path_exists(self.package_dir) {
-            return Err(PackageRepoError::DirectoryNotFound(
-                self.package_dir.to_string_lossy().into_owned(),
+            return Err(PackageListError::PackageDirectoryNotFound(
+                self.package_dir.to_path_buf(),
             ));
         }
 
@@ -138,6 +147,7 @@ mod tests {
 
     use super::*;
     use crate::fs::filesystem::MockFileSystem;
+    use crate::package::port::PackageRepoError;
 
     #[test]
     fn test_get_package_success() {
@@ -194,7 +204,9 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(PackageRepoError::PackageNotFound { .. })
+            Err(PackageRepoError::PackageError(
+                PackageError::PackageNotFound { .. }
+            ))
         ));
     }
 
@@ -212,7 +224,9 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(PackageRepoError::DirectoryNotFound(_))
+            Err(PackageRepoError::PackageListError(
+                PackageListError::PackageDirectoryNotFound(_)
+            ))
         ));
     }
 
@@ -233,7 +247,9 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(PackageRepoError::MultiplePackagesFound(_))
+            Err(PackageRepoError::PackageError(
+                PackageError::MultiplePackagesFound { .. }
+            ))
         ));
     }
 

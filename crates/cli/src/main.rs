@@ -2,6 +2,7 @@ mod cli;
 mod commands;
 mod config;
 mod tables;
+mod terminal_progress_reporter;
 
 use std::process;
 
@@ -12,8 +13,8 @@ use selfie::{
         loader::{ApplyToConfg, ConfigLoader},
     },
     fs::real::RealFileSystem,
-    progress_reporter::terminal::TerminalProgressReporter,
 };
+use terminal_progress_reporter::TerminalProgressReporter;
 use tracing::debug;
 
 use crate::{cli::ClapCli, commands::dispatch_command};
@@ -39,6 +40,7 @@ async fn main() -> anyhow::Result<()> {
 
     debug!("Final config: {:#?}", &config);
 
+    // TODO: Maybe don't need to build this until it's needed?
     let reporter = TerminalProgressReporter::new(config.use_colors());
 
     // 3. Dispatch and execute the requested command

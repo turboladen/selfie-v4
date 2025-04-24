@@ -1,7 +1,9 @@
 use comfy_table::{
     ContentArrangement, Row, Table, modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL_CONDENSED,
 };
-use selfie::{progress_reporter::port::ProgressReporter, validation::ValidationIssue};
+use selfie::validation::ValidationIssue;
+
+use crate::terminal_progress_reporter::TerminalProgressReporter;
 
 pub(crate) struct ValidationTableReporter {
     table: Table,
@@ -27,7 +29,7 @@ impl ValidationTableReporter {
     pub(crate) fn add_validation_errors(
         &mut self,
         error_issues: &[&ValidationIssue],
-        reporter: &impl ProgressReporter,
+        reporter: &TerminalProgressReporter,
     ) -> &mut Self {
         for error in error_issues {
             self.table.add_row(vec![
@@ -47,7 +49,7 @@ impl ValidationTableReporter {
     pub(crate) fn add_validation_warnings(
         &mut self,
         warning_issues: &[&ValidationIssue],
-        reporter: &impl ProgressReporter,
+        reporter: &TerminalProgressReporter,
     ) -> &mut Self {
         for warning in warning_issues {
             self.table.add_row(vec![
