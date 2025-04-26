@@ -12,36 +12,62 @@ pub trait PackageRepository: Send + Sync {
 
     /// List all available packages in the package directory.
     ///
-    fn list_packages(&self) -> Result<ListPackagesOutput, PackageRepoError>;
+    fn list_packages(&self) -> Result<ListPackagesOutput, PackageListError>;
+
+    /// List all valid package names in the repo.
+    ///
+    fn available_packages(&self) -> Result<Vec<String>, PackageListError> {
+        let list_packages_output = self.list_packages()?;
+
+        Ok(list_packages_output
+            .valid_packages()
+            .map(|package| package.name().to_string())
+            .collect())
+    }
 
     /// Find package files that match the given name.
     ///
-    fn find_package_files(&self, name: &str) -> Result<Vec<PathBuf>, PackageRepoError>;
+    fn find_package_files(&self, name: &str) -> Result<Vec<PathBuf>, PackageListError>;
 }
 
 #[derive(Error, Debug)]
 pub enum PackageRepoError {
+    #[error(transparent)]
+    PackageError(#[from] PackageError),
+
+    #[error(transparent)]
+    PackageListError(#[from] PackageListError),
+}
+
+#[derive(Error, Debug)]
+pub enum PackageListError {
+    #[error("IO error reading package list: {0}")]
+    IoError(#[from] std::io::Error),
+
+    #[error("Directory does not exist: {}", _0.display())]
+    PackageDirectoryNotFound(PathBuf),
+}
+
+#[derive(Error, Debug)]
+pub enum PackageError {
     #[error("Package `{name}` not found in path {}", packages_path.display())]
     PackageNotFound {
         name: String,
         packages_path: PathBuf,
     },
-
-    #[error("Multiple packages found with name: {0}")]
-    MultiplePackagesFound(String),
-
-    #[error("Parse error `{source}` from package in path {}", packages_path.display())]
-    ParseError {
-        #[source]
-        source: PackageParseError,
+    #[error("Multiple packages found with name `{name}` in path {}", packages_path.display())]
+    MultiplePackagesFound {
+        name: String,
         packages_path: PathBuf,
     },
 
-    #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
-
-    #[error("Directory does not exist: {0}")]
-    DirectoryNotFound(String),
+    #[error("Parse error `{source}` from package `{name}` in path {}", packages_path.display())]
+    ParseError {
+        name: String,
+        packages_path: PathBuf,
+        #[source]
+        source: PackageParseError,
+    },
 }
 
 #[derive(Debug)]

@@ -17,7 +17,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_yaml.workspace = true
 shellexpand = "3.1"
 thiserror = "2.0"
-tokio = { version = "1.44", features = [
+tokio = { workspace = true, features = [
   "io-std",
   "io-util",
   "macros",

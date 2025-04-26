@@ -87,6 +87,11 @@ impl EnvironmentConfigBuilder {
         self
     }
 
+    pub fn check_some<T: ToString>(mut self, check: T) -> Self {
+        self.check = Some(check.to_string());
+        self
+    }
+
     #[must_use]
     pub fn dependencies<T: ToString>(mut self, dependencies: Vec<T>) -> Self {
         self.dependencies = dependencies.into_iter().map(|d| d.to_string()).collect();

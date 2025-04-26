@@ -1,27 +1,6 @@
-use assert_cmd::Command;
-use std::{fs, io::Write};
-use tempfile::TempDir;
+pub mod common;
 
-fn setup_test_config(yaml_content: &str) -> TempDir {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let config_dir = temp_dir.path().join(".config").join("selfie");
-    fs::create_dir_all(&config_dir).unwrap();
-
-    let config_path = config_dir.join("config.yaml");
-    let mut config_file = fs::File::create(&config_path).unwrap();
-    writeln!(config_file, "{yaml_content}").unwrap();
-
-    temp_dir
-}
-
-fn get_command_with_test_config(temp_dir: &TempDir) -> Command {
-    let mut cmd = Command::cargo_bin("selfie-cli").unwrap();
-    cmd.env(
-        "SELFIE_CONFIG_DIR",
-        temp_dir.path().join(".config").join("selfie"),
-    );
-    cmd
-}
+use common::{get_command_with_test_config, setup_test_config};
 
 #[test]
 fn test_validate_valid_config() {

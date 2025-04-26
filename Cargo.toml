@@ -6,6 +6,7 @@ resolver = "3"
 console = "0.15"
 serde_yaml = "0.9.34"
 tempfile = "3.17.1"
+tokio = "1.44"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 
