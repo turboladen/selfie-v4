@@ -14,6 +14,17 @@ pub trait PackageRepository: Send + Sync {
     ///
     fn list_packages(&self) -> Result<ListPackagesOutput, PackageListError>;
 
+    /// List all valid package names in the repo.
+    ///
+    fn available_packages(&self) -> Result<Vec<String>, PackageListError> {
+        let list_packages_output = self.list_packages()?;
+
+        Ok(list_packages_output
+            .valid_packages()
+            .map(|package| package.name().to_string())
+            .collect())
+    }
+
     /// Find package files that match the given name.
     ///
     fn find_package_files(&self, name: &str) -> Result<Vec<PathBuf>, PackageListError>;

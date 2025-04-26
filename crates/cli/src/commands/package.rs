@@ -172,12 +172,7 @@ fn handle_package_not_found(
     reporter.report_info(format!("Searched in: {}", packages_path.display()));
 
     // Try to find similar package names to suggest
-    if let Ok(repo_output) = repo.list_packages() {
-        let available_packages: Vec<&str> = repo_output
-            .valid_packages()
-            .map(selfie::package::Package::name)
-            .collect();
-
+    if let Ok(available_packages) = repo.available_packages() {
         if !available_packages.is_empty() {
             // Add available packages information
             let msg = if available_packages.len() <= 5 {

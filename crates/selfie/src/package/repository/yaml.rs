@@ -402,4 +402,54 @@ mod tests {
         // Check that non-yaml file is not included
         assert!(!yaml_files.contains(&dir.join("file3.txt")));
     }
+
+    #[test]
+    fn test_available_packages() {
+        let mut fs = MockFileSystem::default();
+        let package_dir = PathBuf::from("/test/packages");
+
+        fs.expect_path_exists()
+            .with(predicate::eq(package_dir.clone()))
+            .returning(|_| true);
+
+        // Add valid and invalid package files
+        let package1 = r"
+            name: ripgrep
+            version: 1.0.0
+            environments:
+              test-env:
+                install: brew install ripgrep
+        ";
+
+        let package2 = r"
+            name: fzf
+            version: 0.2.0
+            environments:
+              other-env:
+                install: brew install fzf
+        ";
+
+        fs.mock_list_directory(
+            package_dir.clone(),
+            &[
+                package_dir.join("ripgrep.yaml"),
+                package_dir.join("fzf.yml"),
+                package_dir.join("invalid.yaml"),
+            ],
+        );
+
+        fs.mock_read_file(package_dir.join("ripgrep.yaml"), package1);
+        fs.mock_read_file(package_dir.join("fzf.yml"), package2);
+        fs.mock_read_file(package_dir.join("invalid.yaml"), "not valid yaml: :");
+
+        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let packages = repo.available_packages().unwrap();
+
+        // Should find only valid packages
+        assert_eq!(packages.len(), 2);
+
+        // Check package details
+        assert!(packages.iter().any(|p| *p == "ripgrep"));
+        assert!(packages.iter().any(|p| *p == "fzf"));
+    }
 }

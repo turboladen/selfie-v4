@@ -7,11 +7,13 @@ use tempfile::TempDir;
 pub const SELFIE_ENV: &str = "test-env";
 
 // Helper to create a temporary config environment
+#[must_use]
 pub fn setup_default_test_config() -> TempDir {
     _setup_test_config(None)
 }
 
 // Helper to create a temporary config environment
+#[must_use]
 pub fn setup_test_config(config_yaml: &str) -> TempDir {
     _setup_test_config(Some(config_yaml))
 }
@@ -55,6 +57,7 @@ pub fn add_package(base_dir: &TempDir, package: &Package) {
 }
 
 // Helper function to get a command instance with environment variables pointing to our test config
+#[must_use]
 pub fn get_command_with_test_config(temp_dir: &TempDir) -> Command {
     let mut cmd = Command::cargo_bin("selfie-cli").unwrap();
 
@@ -69,6 +72,7 @@ pub fn get_command_with_test_config(temp_dir: &TempDir) -> Command {
 }
 
 // Helper function to get a command instance
+#[must_use]
 pub fn get_command() -> Command {
     Command::cargo_bin("selfie-cli").unwrap()
 }
