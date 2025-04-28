@@ -53,9 +53,17 @@ pub(crate) struct PackageCommands {
 
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum PackageSubcommands {
-    /// Install a package
+    /// Run a package's `install` command
+    ///
     Install {
         /// Name of the package to install
+        package_name: String,
+    },
+
+    /// Run a package's `check` command
+    Check {
+        /// Name of the package to check
+        ///
         package_name: String,
     },
 

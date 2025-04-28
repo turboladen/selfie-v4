@@ -46,7 +46,11 @@
 
 ### Phase 4: Package Installation
 
+- [x] Add running `package check`
 - [ ] Add running `package install`
+  - [ ] Run `check` before install
+  - [ ] Run `install`
+  - [ ] Do this for all package dependencies
 
 ---
 
