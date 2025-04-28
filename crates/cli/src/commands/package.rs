@@ -1,3 +1,4 @@
+pub(crate) mod check;
 pub(crate) mod create;
 pub(crate) mod info;
 pub(crate) mod install;

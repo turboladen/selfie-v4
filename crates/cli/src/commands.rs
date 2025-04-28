@@ -49,6 +49,9 @@ async fn dispatch_package_command(
         PackageSubcommands::Install { package_name } => {
             package::install::handle_install(package_name, config, reporter)
         }
+        PackageSubcommands::Check { package_name } => {
+            package::check::handle_check(package_name, config, reporter).await
+        }
         PackageSubcommands::List => ListCommand::new(config, reporter).handle_command(),
         PackageSubcommands::Info { package_name } => {
             package::info::handle_info(package_name, config, reporter).await
