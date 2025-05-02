@@ -176,21 +176,12 @@ where
     let package = steps::fetch_package(repo, package_name, sender, step, total_steps).await?;
 
     // Step 2: Find environment configuration
-    let env_config = match steps::find_environment_config(
-        &package,
-        config.environment(),
-        sender,
-        step,
-        total_steps,
-    )
-    .await
-    {
-        Ok(env_config) => env_config,
-        Err(_) => return Ok("Nothing to do".into()),
-    };
+    let env_config =
+        steps::find_environment_config(&package, config.environment(), sender, step, total_steps)
+            .await?;
 
     // Step 3: Get check command
-    let check_cmd = match steps::get_command(
+    let check_cmd = steps::get_command(
         env_config,
         package_name,
         "check",
@@ -199,14 +190,10 @@ where
         step,
         total_steps,
     )
-    .await
-    {
-        Ok(cmd) => cmd,
-        Err(_) => return Ok("`check` not configured".into()),
-    };
+    .await?;
 
     // Step 4: Execute check command
-    let is_success = match steps::execute_command(
+    let is_success = steps::execute_command(
         command_runner,
         check_cmd,
         "check",
@@ -215,11 +202,7 @@ where
         step,
         total_steps,
     )
-    .await
-    {
-        Ok(success) => success,
-        Err(e) => return Err(e),
-    };
+    .await?;
 
     // Step 5: Process result
     if is_success {

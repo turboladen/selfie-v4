@@ -1,4 +1,3 @@
-// crates/selfie/src/package/service/steps.rs
 use std::borrow::Cow;
 
 use crate::{

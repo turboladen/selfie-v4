@@ -1,4 +1,5 @@
 mod check;
+mod install;
 mod steps;
 
 use std::path::PathBuf;
@@ -27,10 +28,7 @@ pub trait PackageService: Send + Sync {
     async fn check(&self, package_name: &str) -> EventStream<CheckMetadata>;
 
     /// Install a package
-    async fn install(
-        &self,
-        package_name: &str,
-    ) -> Result<EventStream<InstallMetadata>, PackageError>;
+    async fn install(&self, package_name: &str) -> EventStream<InstallMetadata>;
 
     /// Get information about a package
     async fn info(&self, package_name: &str) -> Result<EventStream<InfoMetadata>, PackageError>;
@@ -151,101 +149,43 @@ where
         })
     }
 
-    async fn install(
-        &self,
-        package_name: &str,
-    ) -> Result<EventStream<InstallMetadata>, PackageError> {
+    // Implementation for the install method
+    #[instrument]
+    async fn install(&self, package_name: &str) -> EventStream<InstallMetadata> {
         // Clone what we need for the async task
-        // let fs = self.file_system.clone();
-        // let cr = self.command_runner.clone();
-        // let config = self.config.clone();
-        // let package_name = package_name.to_string();
+        let repo = self.package_repository.clone();
+        let command_runner = self.command_runner.clone();
+        let config = self.config.clone();
+        let package_name = package_name.to_string();
 
-        Ok(Self::create_event_stream(move |tx| async move {
-            //     let _ = tx
-            //         .send(PackageEvent::Started {
-            //             metadata: EventMetadata::new(
-            //                 OperationType::PackageInstall,
-            //                 package_name.to_string(),
-            //             ),
-            //         })
-            //         .await;
-            //
-            //     // Example implementation logic:
-            //     let _ = tx
-            //         .send(PackageEvent::Info {
-            //             message: format!("Using environment: {}", config.environment()),
-            //         })
-            //         .await;
-            //
-            //     // Verify package exists
-            //     let package_dir = config.package_directory().join(&package_name);
-            //     if !fs.path_exists(&package_dir) {
-            //         let _ = tx
-            //             .send(PackageEvent::Error {
-            //                 message: format!("Package '{}' not found", package_name),
-            //                 recoverable: false,
-            //             })
-            //             .await;
-            //         return;
-            //     }
-            //
-            //     // Here would be the actual installation logic...
-            //     let _ = tx
-            //         .send(PackageEvent::Progress {
-            //             step: 1,
-            //             total_steps: 3,
-            //             message: "Reading package manifest".to_string(),
-            //         })
-            //         .await;
-            //
-            //     // Example command execution with streaming output
-            //     if let Ok(output) = cr
-            //         .execute_streaming(
-            //             &format!("echo 'Installing {}'", package_name),
-            //             config.command_timeout(),
-            //             move |chunk| {
-            //                 let msg = match chunk {
-            //                     crate::command_runner::OutputChunk::Stdout(s) => s,
-            //                     crate::command_runner::OutputChunk::Stderr(s) => s,
-            //                 };
-            //                 // This is a bit awkward but we can't easily send on tx from here
-            //                 // We'll log it instead
-            //                 tracing::info!("{}", msg);
-            //             },
-            //         )
-            //         .await
-            //     {
-            //         if output.is_success() {
-            //             let _ = tx
-            //                 .send(PackageEvent::Progress {
-            //                     step: 3,
-            //                     total_steps: 3,
-            //                     message: "Installation complete".to_string(),
-            //                 })
-            //                 .await;
-            //             let _ = tx.send(PackageEvent::Completed).await;
-            //         } else {
-            //             let _ = tx
-            //                 .send(PackageEvent::Error {
-            //                     message: format!(
-            //                         "Installation failed with exit code: {}",
-            //                         output.exit_code()
-            //                     ),
-            //                     recoverable: false,
-            //                 })
-            //                 .await;
-            //         }
-            //     } else {
-            //         let _ = tx
-            //             .send(PackageEvent::Error {
-            //                 message: "Command execution failed".to_string(),
-            //                 recoverable: false,
-            //             })
-            //             .await;
-            //     }
-            todo!()
-        }))
+        Self::create_event_stream(move |tx| async move {
+            let sender = EventSender::new(
+                tx,
+                OperationType::PackageInstall,
+                InstallMetadata::new(config.environment().to_string(), package_name.to_string()),
+            );
+
+            sender.send_started().await;
+            sender
+                .send_trace(format!("Current environment: {}", config.environment()))
+                .await;
+
+            let mut step = 1;
+            let total_steps = 12345; // Replace with actual calculation
+
+            let result = install::handle_install(
+                &package_name,
+                &repo,
+                &config,
+                &command_runner,
+                &sender,
+                &mut step,
+                total_steps,
+            )
+            .await;
+
+            sender.send_completed(result).await;
+        })
     }
 
     // Implement other methods similarly...

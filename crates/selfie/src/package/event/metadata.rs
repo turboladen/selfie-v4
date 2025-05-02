@@ -96,8 +96,29 @@ impl CheckMetadata {
     }
 }
 
-pub struct InstallMetadata;
+#[derive(Debug, Clone)]
+pub struct InstallMetadata {
+    environment: String,
+    package_name: String,
+}
+
+impl InstallMetadata {
+    pub fn new(environment: String, package_name: String) -> Self {
+        Self {
+            environment,
+            package_name,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct InfoMetadata;
+
+#[derive(Debug, Clone)]
 pub struct ValidateMetadata;
+
+#[derive(Debug, Clone)]
 pub struct ListMetadata;
+
+#[derive(Debug, Clone)]
 pub struct CreateMetadata;
