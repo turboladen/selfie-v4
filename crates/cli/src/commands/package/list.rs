@@ -123,7 +123,10 @@ impl<'a> ListCommand<'a> {
 
 impl HandleCommand for ListCommand<'_> {
     fn handle_command(&self) -> i32 {
-        let repo = YamlPackageRepository::new(RealFileSystem, self.config.package_directory());
+        let repo = YamlPackageRepository::new(
+            RealFileSystem,
+            self.config.package_directory().to_path_buf(),
+        );
 
         match repo.list_packages() {
             Ok(list_packages_output) => self.handle_packages_output(list_packages_output),

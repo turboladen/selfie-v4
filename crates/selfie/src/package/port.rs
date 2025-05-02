@@ -33,7 +33,7 @@ pub trait PackageRepository: Send + Sync {
     fn find_package_files(&self, name: &str) -> Result<Vec<PathBuf>, PackageListError>;
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum PackageRepoError {
     #[error(transparent)]
     PackageError(#[from] PackageError),
@@ -51,7 +51,7 @@ pub enum PackageListError {
     PackageDirectoryNotFound(PathBuf),
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum PackageError {
     #[error("Package `{name}` not found in path {}", packages_path.display())]
     PackageNotFound {
@@ -115,20 +115,20 @@ impl ListPackagesOutput {
 }
 
 /// Errors related to package parsing
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum PackageParseError {
     #[error("YAML parsing error reading package file `{}`: {source}", package_path.display())]
     YamlParse {
         package_path: PathBuf,
         #[source]
-        source: serde_yaml::Error,
+        source: Arc<serde_yaml::Error>,
     },
 
     #[error("I/O error reading package file `{}`: {source}", package_path.display())]
     IoError {
         package_path: PathBuf,
         #[source]
-        source: std::io::Error,
+        source: Arc<std::io::Error>,
     },
 
     #[error("File system error reading package file `{}`: {source_message}", package_path.display())]

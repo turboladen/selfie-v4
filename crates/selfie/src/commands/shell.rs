@@ -14,7 +14,7 @@ use super::runner::{CommandError, CommandOutput, CommandRunner, OutputChunk};
 
 /// Shell command runner implementation
 ///
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ShellCommandRunner {
     /// Path to the shell executable
     ///

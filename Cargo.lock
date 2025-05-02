@@ -1394,6 +1394,7 @@ dependencies = [
  "clap",
  "comfy-table",
  "console",
+ "futures",
  "predicates",
  "selfie",
  "serde_yaml",

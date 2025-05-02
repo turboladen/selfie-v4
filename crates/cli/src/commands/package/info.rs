@@ -20,7 +20,7 @@ pub(crate) async fn handle_info(
 ) -> i32 {
     tracing::debug!("Finding package info for: {}", package_name);
 
-    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory());
+    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().to_path_buf());
     let command_runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
 
     match repo.get_package(package_name) {

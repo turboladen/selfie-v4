@@ -1,11 +1,20 @@
+use thiserror::Error;
+
 // use serde::{Deserialize, Serialize};
 //
 use crate::{commands::runner::CommandError, package::port::PackageRepoError};
 
-pub trait StreamedError: std::fmt::Debug + Send + Sync + 'static {}
-
-impl StreamedError for PackageRepoError {}
-impl StreamedError for CommandError {}
+// pub trait StreamedError: std::fmt::Debug + Send + Sync + 'static {}
+//
+// impl StreamedError for PackageRepoError {}
+// impl StreamedError for CommandError {}
+#[derive(Debug, Error, Clone)]
+pub enum StreamedError {
+    #[error(transparent)]
+    PackageRepoError(#[from] PackageRepoError),
+    #[error(transparent)]
+    CommandError(#[from] CommandError),
+}
 
 // #[derive(Debug, Clone, Serialize, Deserialize)]
 // pub struct StreamedError<E> {

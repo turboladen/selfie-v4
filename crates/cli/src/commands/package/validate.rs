@@ -24,7 +24,7 @@ pub(crate) fn handle_validate(
         config.environment()
     ));
 
-    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory());
+    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().to_path_buf());
 
     match repo.get_package(package_name) {
         Ok(package) => {

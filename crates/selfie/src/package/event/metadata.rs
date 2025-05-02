@@ -94,6 +94,14 @@ impl CheckMetadata {
             package_name,
         }
     }
+
+    pub fn environment(&self) -> &str {
+        &self.environment
+    }
+
+    pub fn package_name(&self) -> &str {
+        &self.package_name
+    }
 }
 
 #[derive(Debug, Clone)]

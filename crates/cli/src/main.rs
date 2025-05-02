@@ -22,7 +22,7 @@ use crate::{cli::ClapCli, commands::dispatch_command};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
+    // tracing_subscriber::fmt::init();
 
     let args = ClapCli::parse();
     debug!("CLI arguments: {:#?}", &args);

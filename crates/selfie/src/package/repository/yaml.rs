@@ -14,14 +14,14 @@ use crate::{
     },
 };
 
-#[derive(Clone)]
-pub struct YamlPackageRepository<'a, F: FileSystem> {
+#[derive(Debug, Clone)]
+pub struct YamlPackageRepository<F: FileSystem> {
     fs: F,
-    package_dir: &'a Path,
+    package_dir: PathBuf,
 }
 
-impl<'a, F: FileSystem> YamlPackageRepository<'a, F> {
-    pub fn new(fs: F, package_dir: &'a Path) -> Self {
+impl<F: FileSystem> YamlPackageRepository<F> {
+    pub fn new(fs: F, package_dir: PathBuf) -> Self {
         Self { fs, package_dir }
     }
 
@@ -61,7 +61,7 @@ impl<'a, F: FileSystem> YamlPackageRepository<'a, F> {
         let mut package: Package =
             serde_yaml::from_str(&content).map_err(|e| PackageParseError::YamlParse {
                 package_path: path.to_path_buf(),
-                source: e,
+                source: Arc::new(e),
             })?;
         package.path = path.to_path_buf();
 
@@ -69,7 +69,7 @@ impl<'a, F: FileSystem> YamlPackageRepository<'a, F> {
     }
 }
 
-impl<F: FileSystem> PackageRepository for YamlPackageRepository<'_, F> {
+impl<F: FileSystem> PackageRepository for YamlPackageRepository<F> {
     fn get_package(&self, name: &str) -> Result<Package, PackageRepoError> {
         let package_files = self.find_package_files(name)?;
 
@@ -102,14 +102,14 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<'_, F> {
     }
 
     fn list_packages(&self) -> Result<ListPackagesOutput, PackageListError> {
-        if !self.fs.path_exists(self.package_dir) {
+        if !self.fs.path_exists(&self.package_dir) {
             return Err(PackageListError::PackageDirectoryNotFound(
                 self.package_dir.to_path_buf(),
             ));
         }
 
         // Get all YAML files in the directory
-        let yaml_files = self.list_yaml_files(self.package_dir).map_err(Arc::new)?;
+        let yaml_files = self.list_yaml_files(&self.package_dir).map_err(Arc::new)?;
 
         // Parse each file into a Package
         let mut packages: Vec<Result<Package, PackageParseError>> = Vec::new();
@@ -122,7 +122,7 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<'_, F> {
     }
 
     fn find_package_files(&self, name: &str) -> Result<Vec<PathBuf>, PackageListError> {
-        if !self.fs.path_exists(self.package_dir) {
+        if !self.fs.path_exists(&self.package_dir) {
             return Err(PackageListError::PackageDirectoryNotFound(
                 self.package_dir.to_path_buf(),
             ));

@@ -4,7 +4,6 @@ pub mod metadata;
 use std::{
     fmt::{self, Debug},
     pin::Pin,
-    sync::Arc,
 };
 
 use futures::Stream;
@@ -147,7 +146,10 @@ impl<T: Debug + Clone> EventSender<T> {
             .await;
     }
 
-    pub(crate) async fn send_error<E: StreamedError>(&self, error: E, message: impl fmt::Display) {
+    pub(crate) async fn send_error<E>(&self, error: E, message: impl fmt::Display)
+    where
+        StreamedError: From<E>,
+    {
         let metadata = self.metadata.touch_and_clone();
         let msg = message.to_string();
         tracing::error!(
@@ -159,7 +161,7 @@ impl<T: Debug + Clone> EventSender<T> {
             .tx
             .send(PackageEvent::Error {
                 metadata,
-                error: Arc::new(error),
+                error: StreamedError::from(error),
                 message: msg,
             })
             .await;
@@ -225,7 +227,7 @@ pub enum PackageEvent<T> {
     /// Error occurred but operation continues
     Error {
         metadata: EventMetadata<T>,
-        error: Arc<dyn StreamedError>,
+        error: StreamedError,
         message: String,
     },
 }

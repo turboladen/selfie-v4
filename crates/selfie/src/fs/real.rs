@@ -10,7 +10,7 @@ use etcetera::{AppStrategy, AppStrategyArgs, choose_app_strategy};
 use super::filesystem::{FileSystem, FileSystemError};
 
 /// Real file system implementation
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct RealFileSystem;
 
 impl FileSystem for RealFileSystem {
