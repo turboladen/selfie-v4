@@ -1,6 +1,8 @@
 mod builder;
+pub mod event;
 pub mod port;
 pub mod repository;
+pub mod service;
 pub mod validate;
 
 pub use self::builder::{EnvironmentConfigBuilder, PackageBuilder};

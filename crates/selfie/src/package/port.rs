@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use thiserror::Error;
 
 use crate::package::Package;
@@ -39,10 +42,10 @@ pub enum PackageRepoError {
     PackageListError(#[from] PackageListError),
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum PackageListError {
     #[error("IO error reading package list: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(#[from] Arc<std::io::Error>),
 
     #[error("Directory does not exist: {}", _0.display())]
     PackageDirectoryNotFound(PathBuf),

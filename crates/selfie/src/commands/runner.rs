@@ -1,9 +1,9 @@
-use std::{borrow::Cow, fmt, process::Output, time::Duration};
+use std::{borrow::Cow, fmt, process::Output, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OutputChunk {
     Stdout(String),
     Stderr(String),
@@ -94,13 +94,13 @@ impl CommandOutput {
 }
 
 /// Errors that can occur during command execution
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum CommandError {
     #[error("Command timed out after {0:?}")]
     Timeout(Duration),
 
     #[error("IO Error: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(#[from] Arc<std::io::Error>),
 
     #[error("Failed spawning stdout during command: {0}")]
     StdoutSpawn(String),

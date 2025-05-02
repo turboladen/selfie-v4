@@ -2,6 +2,7 @@
 
 use std::{
     process::{Output, Stdio},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -72,9 +73,12 @@ impl CommandRunner for ShellCommandRunner {
         let duration = start_time.elapsed();
 
         // Execute the command within the context of a timeout
-        let output = tokio::time::timeout(timeout, cmd.output().map_err(CommandError::from))
-            .await
-            .map_err(|_| CommandError::Timeout(timeout))??;
+        let output = tokio::time::timeout(
+            timeout,
+            cmd.output().map_err(|e| CommandError::from(Arc::new(e))),
+        )
+        .await
+        .map_err(|_| CommandError::Timeout(timeout))??;
 
         Ok(CommandOutput { output, duration })
     }
@@ -99,7 +103,7 @@ impl CommandRunner for ShellCommandRunner {
 
         let mut child = match cmd.spawn() {
             Ok(child) => child,
-            Err(e) => return Err(CommandError::from(e)),
+            Err(e) => return Err(CommandError::from(Arc::new(e))),
         };
 
         let stdout = child
@@ -139,7 +143,7 @@ impl CommandRunner for ShellCommandRunner {
                         handle_chunked_read_result(result, &mut full_stderr, &mut stderr_buf, &tx, OutputChunk::Stderr).await?;
                     },
                     status = child.wait() => {
-                        let status = status.map_err(CommandError::from)?;
+                        let status = status.map_err(|e| CommandError::from(Arc::new(e)))?;
                         let duration = start_time.elapsed();
 
                         return Ok(CommandOutput {
@@ -181,7 +185,7 @@ async fn handle_chunked_read_result(
                 .map_err(|e| CommandError::Callback(e.0))?;
             buffer.clear();
         }
-        Err(e) => return Err(CommandError::IoError(e)),
+        Err(e) => return Err(CommandError::IoError(Arc::new(e))),
     }
     Ok(())
 }

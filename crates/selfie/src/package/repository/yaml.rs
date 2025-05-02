@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use crate::{
     fs::FileSystem,
@@ -106,7 +109,7 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<'_, F> {
         }
 
         // Get all YAML files in the directory
-        let yaml_files = self.list_yaml_files(self.package_dir)?;
+        let yaml_files = self.list_yaml_files(self.package_dir).map_err(Arc::new)?;
 
         // Parse each file into a Package
         let mut packages: Vec<Result<Package, PackageParseError>> = Vec::new();

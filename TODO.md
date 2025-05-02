@@ -44,9 +44,23 @@
 - [x] Move the `Reporter` stuff out of the `selfie` crate--this should be the
       job of the UI.
 
-### Phase 4: Package Installation
+### Phase 4: Package Check Command
 
 - [x] Add running `package check`
+
+### Phase 5: Library Commands
+
+I'm not liking how the library feels like a cobbling together of tools. It
+should provide clear interfaces for each command and sub-command; add these
+interfaces to the library. To facilitate this, add an event stream pattern
+implementation that includes:
+
+1. Rich, Structured Events — not just strings but typed data structures
+2. Bidirectional Communication — Support for control commands from UI to library
+3. Context/Metadata — Each event carries operation context/ID
+
+### Phase 6: Package Installation
+
 - [ ] Add running `package install`
   - [ ] Run `check` before install
   - [ ] Run `install`

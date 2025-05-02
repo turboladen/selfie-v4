@@ -5,7 +5,7 @@ pub(crate) mod install;
 pub(crate) mod list;
 pub(crate) mod validate;
 
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use selfie::package::port::{
     PackageError, PackageListError, PackageParseError, PackageRepoError, PackageRepository,
@@ -225,7 +225,7 @@ fn handle_parse_error(
         .report_suggestion("Check the format of your package file and make sure it's valid YAML");
 }
 
-fn handle_io_error(error: std::io::Error, reporter: TerminalProgressReporter) {
+fn handle_io_error(error: Arc<std::io::Error>, reporter: TerminalProgressReporter) {
     reporter.report_error("✗ I/O Error");
     reporter.report_info("Failed to read package information due to an I/O error:");
     reporter.report_info(format!("{error}"));
