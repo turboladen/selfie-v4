@@ -33,6 +33,15 @@ impl<F: FileSystem> ConfigLoader for YamlLoader<'_, F> {
                     .collect::<Vec<_>>(),
             ));
         }
+
+        // This should never happen now since find_config_file_paths
+        // either returns a non-empty vector or an error
+        if config_paths.is_empty() {
+            return Err(ConfigLoadError::NotFound {
+                searched: PathBuf::from("~/.config/selfie"),
+            });
+        }
+
         // Start with default configuration
         let mut builder = config::Config::builder();
 
@@ -59,20 +68,24 @@ impl<F: FileSystem> ConfigLoader for YamlLoader<'_, F> {
     fn find_config_file_paths(&self) -> Result<Vec<PathBuf>, PathBuf> {
         let mut paths = Vec::new();
 
-        if let Ok(config_dir) = self.fs.config_dir() {
-            let config_yaml = config_dir.join("config.yaml");
-            let config_yml = config_dir.join("config.yml");
+        let config_dir = self.fs.config_dir().map_err(|_| {
+            // When config_dir fails, we can't determine a search path
+            // Return a generic path to indicate the search location
+            PathBuf::from("~/.config/selfie")
+        })?;
 
-            if self.fs.path_exists(&config_yaml) {
-                paths.push(config_yaml);
-            }
-            if self.fs.path_exists(&config_yml) {
-                paths.push(config_yml);
-            }
+        let config_yaml = config_dir.join("config.yaml");
+        let config_yml = config_dir.join("config.yml");
 
-            if paths.is_empty() {
-                return Err(config_dir);
-            }
+        if self.fs.path_exists(&config_yaml) {
+            paths.push(config_yaml);
+        }
+        if self.fs.path_exists(&config_yml) {
+            paths.push(config_yml);
+        }
+
+        if paths.is_empty() {
+            return Err(config_dir);
         }
 
         Ok(paths)
@@ -157,10 +170,12 @@ mod tests {
                 .return_once(|| Err(FileSystemError::HomeDirNotFound));
 
             let loader = YamlLoader::new(&fs);
-            let paths = loader.find_config_file_paths().unwrap();
+            let result = loader.find_config_file_paths();
 
-            // Should return empty vector when config dir can't be found
-            assert!(paths.is_empty());
+            // Should return error when config dir can't be found
+            assert!(result.is_err());
+            let searched_path = result.unwrap_err();
+            assert_eq!(searched_path, PathBuf::from("~/.config/selfie"));
         }
     }
 
@@ -427,8 +442,8 @@ mod tests {
 
             // Mock filesystem error when reading file
             fs.expect_read_file()
-                .with(mockall::predicate::eq(config_path))
-                .returning(|_| {
+                .with(mockall::predicate::eq(config_path.clone()))
+                .return_once(|_| {
                     Err(FileSystemError::IoError(std::io::Error::new(
                         std::io::ErrorKind::PermissionDenied,
                         "Permission denied",
@@ -440,10 +455,30 @@ mod tests {
 
             assert!(result.is_err());
             match result.unwrap_err() {
-                ConfigLoadError::FileSystemError(FileSystemError::IoError(io_error)) => {
-                    assert_eq!(io_error.kind(), std::io::ErrorKind::PermissionDenied);
+                ConfigLoadError::FileSystemError(FileSystemError::IoError(e)) => {
+                    assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied);
                 }
-                _ => panic!("Expected FileSystemError"),
+                other => panic!("Expected FileSystemError::IoError, got: {:?}", other),
+            }
+        }
+
+        #[test]
+        fn test_config_load_config_dir_error() {
+            let mut fs = MockFileSystem::default();
+
+            // Mock config_dir failing
+            fs.expect_config_dir()
+                .return_once(|| Err(FileSystemError::HomeDirNotFound));
+
+            let loader = YamlLoader::new(&fs);
+            let result = loader.load_config();
+
+            assert!(result.is_err());
+            match result.unwrap_err() {
+                ConfigLoadError::NotFound { searched } => {
+                    assert_eq!(searched, PathBuf::from("~/.config/selfie"));
+                }
+                other => panic!("Expected ConfigLoadError::NotFound, got: {:?}", other),
             }
         }
 
@@ -473,9 +508,5 @@ mod tests {
             );
             assert!(multiple_error.to_string().contains("config1.yaml"));
         }
-
-        // Note: There's a potential bug in find_config_file_paths where it returns Ok(empty_vec)
-        // when config_dir() fails, leading to index out of bounds in load_config.
-        // This should be addressed in a future fix.
     }
 }
