@@ -1,5 +1,5 @@
 use comfy_table::{
-    ContentArrangement, Row, Table, modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL_CONDENSED,
+    ContentArrangement, Table, modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL_CONDENSED,
 };
 use selfie::validation::ValidationIssue;
 
@@ -66,43 +66,7 @@ impl ValidationTableReporter {
         self
     }
 
-    pub(crate) fn add_row<T: Into<Row>>(&mut self, row: T) -> &mut Self {
-        self.table.add_row(row);
-        self
-    }
-
     pub(crate) fn print(&self) {
         eprintln!("{}", &self.table);
-    }
-}
-
-pub(crate) struct PackageListTableReporter {
-    table: Table,
-}
-
-impl PackageListTableReporter {
-    pub(crate) fn new() -> Self {
-        Self {
-            table: Table::new(),
-        }
-    }
-
-    pub(crate) fn setup(&mut self, header: Vec<&'static str>) -> &mut Self {
-        self.table
-            .load_preset(UTF8_FULL_CONDENSED)
-            .apply_modifier(UTF8_ROUND_CORNERS)
-            .set_content_arrangement(ContentArrangement::Dynamic)
-            .set_header(header);
-
-        self
-    }
-
-    pub(crate) fn add_row<T: Into<Row>>(&mut self, row: T) -> &mut Self {
-        self.table.add_row(row);
-        self
-    }
-
-    pub(crate) fn print(&self) {
-        println!("{}", &self.table);
     }
 }

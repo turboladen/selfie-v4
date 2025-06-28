@@ -12,7 +12,9 @@ use selfie::{
 };
 
 use crate::{
-    event_processor::EventProcessor, terminal_progress_reporter::TerminalProgressReporter,
+    event_processor::EventProcessor,
+    formatters::{FieldStyle, format_field},
+    terminal_progress_reporter::TerminalProgressReporter,
 };
 
 pub(crate) async fn handle_validate(
@@ -76,22 +78,21 @@ fn display_validation_success_card(validation_result: &ValidationResultData, con
     println!();
     println!("📋 Validation Results:");
 
-    let format_field = |field: &str| -> String {
-        if config.use_colors() {
-            format!("   {}: ", console::style(field).cyan().bold())
-        } else {
-            format!("   {}: ", field)
-        }
+    let format_key = |field: &str| -> String {
+        format!(
+            "   {}: ",
+            format_field(field, FieldStyle::Key, config.use_colors())
+        )
     };
 
     println!(
         "{}{}",
-        format_field("Package"),
+        format_key("Package"),
         validation_result.package_name
     );
     println!(
         "{}{}",
-        format_field("Environment"),
+        format_key("Environment"),
         validation_result.environment
     );
 

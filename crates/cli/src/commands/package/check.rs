@@ -10,7 +10,9 @@ use selfie::{
 };
 
 use crate::{
-    event_processor::EventProcessor, terminal_progress_reporter::TerminalProgressReporter,
+    event_processor::EventProcessor,
+    formatters::{FieldStyle, format_field},
+    terminal_progress_reporter::TerminalProgressReporter,
 };
 
 pub(crate) async fn handle_check(
@@ -70,24 +72,18 @@ fn display_check_result_card(check_result: &CheckResultData, config: &AppConfig)
     println!();
     println!("📋 Check Results:");
 
-    // Use colors if enabled
-    let format_field = |field: &str| -> String {
-        if config.use_colors() {
-            format!("   {}: ", console::style(field).cyan().bold())
-        } else {
-            format!("   {}: ", field)
-        }
+    let format_key = |field: &str| -> String {
+        format!(
+            "   {}: ",
+            format_field(field, FieldStyle::Key, config.use_colors())
+        )
     };
 
-    println!("{}{}", format_field("Package"), check_result.package_name);
-    println!(
-        "{}{}",
-        format_field("Environment"),
-        check_result.environment
-    );
+    println!("{}{}", format_key("Package"), check_result.package_name);
+    println!("{}{}", format_key("Environment"), check_result.environment);
 
     if let Some(cmd) = &check_result.check_command {
-        println!("{}{}", format_field("Command"), cmd);
+        println!("{}{}", format_key("Command"), cmd);
     }
 
     // Format status with appropriate icon and color

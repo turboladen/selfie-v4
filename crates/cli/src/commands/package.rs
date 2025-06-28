@@ -13,114 +13,7 @@ use selfie::package::port::{
 
 use crate::terminal_progress_reporter::TerminalProgressReporter;
 
-use self::list::ListCommand;
-
-use super::ReportError;
-
-pub(crate) struct PackageRepoErrorReporter<'a> {
-    error: PackageRepoError,
-    repo: &'a dyn PackageRepository,
-    reporter: TerminalProgressReporter,
-}
-
-impl<'a> PackageRepoErrorReporter<'a> {
-    pub(crate) fn new(
-        error: PackageRepoError,
-        repo: &'a dyn PackageRepository,
-        reporter: TerminalProgressReporter,
-    ) -> Self {
-        Self {
-            error,
-            repo,
-            reporter,
-        }
-    }
-}
-
-impl ReportError<ListCommand<'_>> for PackageRepoErrorReporter<'_> {
-    fn report_error(self) {
-        match self.error {
-            PackageRepoError::PackageError(e) => {
-                PackageErrorReporter::new(e, self.repo, self.reporter).report_error();
-            }
-            PackageRepoError::PackageListError(e) => {
-                PackageListErrorReporter::new(e, self.reporter).report_error();
-            }
-        }
-    }
-}
-
-pub(crate) struct PackageErrorReporter<'a> {
-    package_error: PackageError,
-    repo: &'a dyn PackageRepository,
-    reporter: TerminalProgressReporter,
-}
-
-impl<'a> PackageErrorReporter<'a> {
-    pub(crate) fn new(
-        package_error: PackageError,
-        repo: &'a dyn PackageRepository,
-        reporter: TerminalProgressReporter,
-    ) -> Self {
-        Self {
-            package_error,
-            repo,
-            reporter,
-        }
-    }
-}
-
-impl ReportError<ListCommand<'_>> for PackageErrorReporter<'_> {
-    fn report_error(self) {
-        match self.package_error {
-            PackageError::PackageNotFound {
-                ref name,
-                ref packages_path,
-            } => {
-                handle_package_not_found(name, packages_path, self.repo, self.reporter);
-            }
-            PackageError::MultiplePackagesFound {
-                ref name,
-                ref packages_path,
-            } => {
-                handle_multiple_packages_found(name, packages_path, self.reporter);
-            }
-            PackageError::ParseError {
-                ref name,
-                ref packages_path,
-                ref source,
-            } => {
-                handle_parse_error(name, source, packages_path, self.reporter);
-            }
-        }
-    }
-}
-
-pub(crate) struct PackageListErrorReporter {
-    error: PackageListError,
-    reporter: TerminalProgressReporter,
-}
-
-impl PackageListErrorReporter {
-    pub(crate) fn new(error: PackageListError, reporter: TerminalProgressReporter) -> Self {
-        Self { error, reporter }
-    }
-}
-
-impl ReportError<ListCommand<'_>> for PackageListErrorReporter {
-    fn report_error(self) {
-        match self.error {
-            PackageListError::IoError(error) => {
-                handle_io_error(error, self.reporter);
-            }
-            PackageListError::PackageDirectoryNotFound(ref dir) => {
-                handle_directory_not_found(dir, self.reporter);
-            }
-        }
-    }
-}
-
-fn handle_package_repo_error(
+pub(crate) fn handle_package_repo_error(
     e: PackageRepoError,
     repo: &dyn PackageRepository,
     reporter: TerminalProgressReporter,
@@ -193,7 +86,7 @@ fn handle_package_not_found(
     reporter.report_suggestion("Run 'selfie package list' to see all available packages");
 }
 
-fn handle_multiple_packages_found(
+pub(crate) fn handle_multiple_packages_found(
     name: &str,
     packages_path: &Path,
     reporter: TerminalProgressReporter,
@@ -210,7 +103,7 @@ fn handle_multiple_packages_found(
         .report_suggestion("Use only one file extension (.yaml or .yml) for your package files");
 }
 
-fn handle_parse_error(
+pub(crate) fn handle_parse_error(
     package_name: &str,
     source: &PackageParseError,
     packages_path: &Path,
@@ -225,7 +118,7 @@ fn handle_parse_error(
         .report_suggestion("Check the format of your package file and make sure it's valid YAML");
 }
 
-fn handle_io_error(error: Arc<std::io::Error>, reporter: TerminalProgressReporter) {
+pub(crate) fn handle_io_error(error: Arc<std::io::Error>, reporter: TerminalProgressReporter) {
     reporter.report_error("✗ I/O Error");
     reporter.report_info("Failed to read package information due to an I/O error:");
     reporter.report_info(format!("{error}"));

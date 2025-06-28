@@ -10,14 +10,6 @@ use crate::{
     terminal_progress_reporter::TerminalProgressReporter,
 };
 
-pub(crate) trait HandleCommand {
-    fn handle_command(&self) -> i32;
-}
-
-pub(crate) trait ReportError<C> {
-    fn report_error(self);
-}
-
 /// Primary command dispatcher that routes to the appropriate command handler
 pub(crate) async fn dispatch_command(
     command: &ClapCommands,
