@@ -6,7 +6,10 @@ use crate::{
     commands::runner::CommandRunner,
     config::AppConfig,
     package::{
-        event::{EventSender, OperationResult},
+        event::{
+            EventSender, OperationResult, ValidationIssueData, ValidationLevel,
+            ValidationResultData, ValidationStatus,
+        },
         port::PackageRepository,
     },
 };
@@ -49,58 +52,85 @@ where
     // Step 3: Process validation results
     progress.next(sender, "Processing validation results").await;
 
-    if issues.has_errors() {
-        let error_count = issues.errors().len();
-        let warning_count = issues.warnings().len();
+    // Convert validation issues to structured data
+    let mut validation_issues = Vec::new();
 
-        for error in issues.errors() {
-            sender
-                .send_warning(format!("Validation error: {:?}", error))
-                .await;
-        }
+    for error in issues.errors() {
+        validation_issues.push(ValidationIssueData {
+            category: format!("{:?}", error.category()),
+            field: error.field().to_string(),
+            message: error.message().to_string(),
+            level: ValidationLevel::Error,
+            suggestion: error.suggestion().map(|s| s.to_string()),
+        });
+    }
 
-        for warning in issues.warnings() {
-            sender
-                .send_warning(format!("Validation warning: {:?}", warning))
-                .await;
-        }
+    for warning in issues.warnings() {
+        validation_issues.push(ValidationIssueData {
+            category: format!("{:?}", warning.category()),
+            field: warning.field().to_string(),
+            message: warning.message().to_string(),
+            level: ValidationLevel::Warning,
+            suggestion: warning.suggestion().map(|s| s.to_string()),
+        });
+    }
 
-        let error_msg = format!(
-            "Package '{}' validation failed with {} error(s) and {} warning(s) (completed {}/{} steps)",
-            package_name,
-            error_count,
-            warning_count,
-            progress.current_step(),
-            progress.total_steps()
-        );
-        OperationResult::Failure(error_msg)
+    // Determine overall validation status
+    let status = if issues.has_errors() {
+        ValidationStatus::HasErrors
     } else if issues.has_warnings() {
-        let warning_count = issues.warnings().len();
-
-        for warning in issues.warnings() {
-            sender
-                .send_warning(format!("Validation warning: {:?}", warning))
-                .await;
-        }
-
-        let success_msg = format!(
-            "Package '{}' validation completed with {} warning(s) ({}/{} steps)",
-            package_name,
-            warning_count,
-            progress.current_step(),
-            progress.total_steps()
-        );
-        OperationResult::Success(success_msg)
+        ValidationStatus::HasWarnings
     } else {
-        let success_msg = format!(
-            "Package '{}' validation completed successfully ({}/{} steps)",
-            package_name,
-            progress.current_step(),
-            progress.total_steps()
-        );
-        sender
-            .send_debug("Package definition is valid for the current environment")
-            .await;
-        OperationResult::Success(success_msg)
+        ValidationStatus::Valid
+    };
+
+    // Send structured validation result
+    let validation_result = ValidationResultData {
+        package_name: package_name.to_string(),
+        environment: config.environment().to_string(),
+        status: status.clone(),
+        issues: validation_issues,
+    };
+
+    sender.send_validation_result(validation_result).await;
+
+    // Return appropriate operation result
+    match status {
+        ValidationStatus::Valid => {
+            let success_msg = format!(
+                "Package '{}' validation completed successfully ({}/{} steps)",
+                package_name,
+                progress.current_step(),
+                progress.total_steps()
+            );
+            sender
+                .send_debug("Package definition is valid for the current environment")
+                .await;
+            OperationResult::Success(success_msg)
+        }
+        ValidationStatus::HasWarnings => {
+            let warning_count = issues.warnings().len();
+            let success_msg = format!(
+                "Package '{}' validation completed with {} warning(s) ({}/{} steps)",
+                package_name,
+                warning_count,
+                progress.current_step(),
+                progress.total_steps()
+            );
+            OperationResult::Success(success_msg)
+        }
+        ValidationStatus::HasErrors => {
+            let error_count = issues.errors().len();
+            let warning_count = issues.warnings().len();
+            let error_msg = format!(
+                "Package '{}' validation failed with {} error(s) and {} warning(s) (completed {}/{} steps)",
+                package_name,
+                error_count,
+                warning_count,
+                progress.current_step(),
+                progress.total_steps()
+            );
+            OperationResult::Failure(error_msg)
+        }
     }
 }

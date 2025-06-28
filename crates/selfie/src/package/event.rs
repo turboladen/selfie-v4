@@ -270,6 +270,16 @@ impl EventSender {
         .await;
     }
 
+    /// Send validation result data
+    pub(crate) async fn send_validation_result(&self, validation_result: ValidationResultData) {
+        let operation_info = self.touch_operation_info();
+        self.send(PackageEvent::ValidationResultCompleted {
+            operation_info,
+            validation_result,
+        })
+        .await;
+    }
+
     fn touch_operation_info(&self) -> OperationInfo {
         let mut info = self.operation_info.clone();
         info.timestamp = Instant::now();
@@ -412,6 +422,12 @@ pub enum PackageEvent {
         operation_info: OperationInfo,
         check_result: CheckResultData,
     },
+
+    /// Validation result completed
+    ValidationResultCompleted {
+        operation_info: OperationInfo,
+        validation_result: ValidationResultData,
+    },
 }
 
 /// Structured data for package information
@@ -489,6 +505,40 @@ pub enum CheckResult {
     CommandNotFound,
     NoCheckCommand,
     Error(String),
+}
+
+/// Structured data for validation results
+#[derive(Debug, Clone)]
+pub struct ValidationResultData {
+    pub package_name: String,
+    pub environment: String,
+    pub status: ValidationStatus,
+    pub issues: Vec<ValidationIssueData>,
+}
+
+/// Overall validation status
+#[derive(Debug, Clone)]
+pub enum ValidationStatus {
+    Valid,
+    HasWarnings,
+    HasErrors,
+}
+
+/// Individual validation issue
+#[derive(Debug, Clone)]
+pub struct ValidationIssueData {
+    pub category: String,
+    pub field: String,
+    pub message: String,
+    pub level: ValidationLevel,
+    pub suggestion: Option<String>,
+}
+
+/// Validation issue level
+#[derive(Debug, Clone)]
+pub enum ValidationLevel {
+    Error,
+    Warning,
 }
 
 /// Log levels for the EventSender log method
