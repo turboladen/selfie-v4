@@ -250,6 +250,16 @@ impl EventSender {
         .await;
     }
 
+    /// Send package list data
+    pub(crate) async fn send_package_list(&self, package_list: PackageListData) {
+        let operation_info = self.touch_operation_info();
+        self.send(PackageEvent::PackageListLoaded {
+            operation_info,
+            package_list,
+        })
+        .await;
+    }
+
     fn touch_operation_info(&self) -> OperationInfo {
         let mut info = self.operation_info.clone();
         info.timestamp = Instant::now();
@@ -380,6 +390,12 @@ pub enum PackageEvent {
         operation_info: OperationInfo,
         environment_status: EnvironmentStatusData,
     },
+
+    /// Package list loaded
+    PackageListLoaded {
+        operation_info: OperationInfo,
+        package_list: PackageListData,
+    },
 }
 
 /// Structured data for package information
@@ -410,6 +426,30 @@ pub enum EnvironmentStatus {
     Installed,
     NotInstalled,
     Unknown(String),
+}
+
+/// Structured data for package list
+#[derive(Debug, Clone)]
+pub struct PackageListData {
+    pub valid_packages: Vec<PackageListItem>,
+    pub invalid_packages: Vec<InvalidPackageInfo>,
+    pub current_environment: String,
+    pub package_directory: String,
+}
+
+/// Information about a package in the list
+#[derive(Debug, Clone)]
+pub struct PackageListItem {
+    pub name: String,
+    pub version: String,
+    pub environments: Vec<String>,
+}
+
+/// Information about an invalid package
+#[derive(Debug, Clone)]
+pub struct InvalidPackageInfo {
+    pub path: String,
+    pub error: String,
 }
 
 /// Log levels for the EventSender log method

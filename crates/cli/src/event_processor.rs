@@ -191,6 +191,11 @@ impl EventProcessor {
                 // These structured events are handled by command-specific handlers
                 // If no custom handler processed them, just continue
             }
+
+            PackageEvent::PackageListLoaded { .. } => {
+                // These structured events are handled by command-specific handlers
+                // If no custom handler processed them, just continue
+            }
         }
 
         false // Continue processing
