@@ -179,7 +179,7 @@ mod tests {
             .returning(|_| false);
         fs.mock_read_file(package_path, yaml);
 
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
         let package = repo.get_package("ripgrep").unwrap();
 
         assert_eq!(package.name, "ripgrep");
@@ -202,7 +202,7 @@ mod tests {
             .with(predicate::eq(package_dir.join("nonexistent.yml")))
             .returning(|_| false);
 
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
         let result = repo.get_package("nonexistent");
 
         assert!(matches!(
@@ -222,7 +222,7 @@ mod tests {
             .with(predicate::eq(package_dir.clone()))
             .returning(|_| false);
 
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
         let result = repo.get_package("ripgrep");
 
         assert!(matches!(
@@ -245,7 +245,7 @@ mod tests {
         fs.mock_path_exists(&package_dir, true);
         fs.mock_path_exists(&yaml_path, true);
         fs.mock_path_exists(&yml_path, true);
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
         let result = repo.get_package("ripgrep");
 
         assert!(matches!(
@@ -287,7 +287,7 @@ mod tests {
             .with(predicate::eq(package_dir.join("nonexistent.yml")))
             .returning(|_| false);
 
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
 
         // Should find ripgrep.yaml
         let files = repo.find_package_files("ripgrep").unwrap();
@@ -343,7 +343,7 @@ mod tests {
         fs.mock_read_file(package_dir.join("fzf.yml"), package2);
         fs.mock_read_file(package_dir.join("invalid.yaml"), "not valid yaml: :");
 
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
         let package_output = repo.list_packages().unwrap();
 
         // Should find both valid packages
@@ -390,7 +390,7 @@ mod tests {
                 ])
             });
 
-        let repo = YamlPackageRepository::new(fs, Path::new("/dummy")); // Path doesn't matter here
+        let repo = YamlPackageRepository::new(fs, Path::new("/dummy").to_path_buf()); // Path doesn't matter here
         let yaml_files = repo.list_yaml_files(&dir).unwrap();
 
         // Should find all yaml/yml files regardless of case
@@ -445,7 +445,7 @@ mod tests {
         fs.mock_read_file(package_dir.join("fzf.yml"), package2);
         fs.mock_read_file(package_dir.join("invalid.yaml"), "not valid yaml: :");
 
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
         let packages = repo.available_packages().unwrap();
 
         // Should find only valid packages
