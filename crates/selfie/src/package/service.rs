@@ -9,7 +9,10 @@ use tokio::sync::mpsc;
 use tracing::instrument;
 
 use super::{
-    event::{EventSender, EventStream, OperationResult, PackageEvent, metadata::OperationType},
+    event::{
+        EventSender, EventStream, OperationContext, OperationResult, PackageEvent,
+        metadata::OperationType,
+    },
     port::PackageRepository,
 };
 
@@ -78,6 +81,40 @@ where
         Box::pin(futures::stream::unfold(rx, |mut rx| async move {
             rx.recv().await.map(|event| (event, rx))
         }))
+    }
+
+    // Helper to execute an operation with standard event handling
+    fn execute_operation<F, Fut>(
+        &self,
+        operation_type: OperationType,
+        package_name: &str,
+        context: OperationContext,
+        handler: F,
+    ) -> EventStream
+    where
+        F: FnOnce(EventSender) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = OperationResult> + Send,
+    {
+        let config = self.config.clone();
+        let package_name = package_name.to_string();
+
+        Self::create_event_stream(move |tx| async move {
+            let sender = EventSender::new_with_context(
+                tx,
+                operation_type,
+                package_name,
+                config.environment().to_string(),
+                context,
+            );
+
+            sender.send_started().await;
+            sender
+                .send_trace(format!("Current environment: {}", config.environment()))
+                .await;
+
+            let result = handler(sender.clone()).await;
+            sender.send_completed(result).await;
+        })
     }
 }
 
@@ -161,7 +198,7 @@ where
     async fn validate(
         &self,
         package_name: &str,
-        _package_path: Option<PathBuf>,
+        package_path: Option<PathBuf>,
     ) -> Result<EventStream, PackageError> {
         let repo = self.package_repository.clone();
         let command_runner = self.command_runner.clone();
@@ -169,11 +206,16 @@ where
         let package_name = package_name.to_string();
 
         Ok(Self::create_event_stream(move |tx| async move {
-            let sender = EventSender::new(
+            let context = OperationContext {
+                package_path,
+                target_environment: None,
+            };
+            let sender = EventSender::new_with_context(
                 tx,
                 OperationType::PackageValidate,
                 package_name.clone(),
                 config.environment().to_string(),
+                context,
             );
             sender.send_started().await;
             let current_env = config.environment();
@@ -191,64 +233,38 @@ where
     }
 
     async fn list(&self) -> Result<EventStream, PackageError> {
-        // Clone what we need
-        let config = self.config.clone();
-
-        Ok(Self::create_event_stream(move |tx| async move {
-            let sender = EventSender::new(
-                tx,
-                OperationType::PackageList,
-                "".to_string(), // No specific package for list operation
-                config.environment().to_string(),
-            );
-
-            sender.send_started().await;
-
-            // TODO: Implement actual listing logic
-            let result = OperationResult::Success("List operation not yet implemented".to_string());
-            sender.send_completed(result).await;
-        }))
+        Ok(self.execute_operation(
+            OperationType::PackageList,
+            "", // No specific package for list operation
+            OperationContext::default(),
+            |_sender| async move {
+                // TODO: Implement actual listing logic
+                OperationResult::Success("List operation not yet implemented".to_string())
+            },
+        ))
     }
 
     async fn info(&self, package_name: &str) -> Result<EventStream, PackageError> {
-        // Implementation similar to other methods
-        let package_name = package_name.to_string();
-        let config = self.config.clone();
-
-        Ok(Self::create_event_stream(move |tx| async move {
-            let sender = EventSender::new(
-                tx,
-                OperationType::PackageInfo,
-                package_name.clone(),
-                config.environment().to_string(),
-            );
-
-            sender.send_started().await;
-
-            // TODO: Implement actual info logic
-            let result = OperationResult::Success("Info operation not yet implemented".to_string());
-            sender.send_completed(result).await;
-        }))
+        Ok(self.execute_operation(
+            OperationType::PackageInfo,
+            package_name,
+            OperationContext::default(),
+            |_sender| async move {
+                // TODO: Implement actual info logic
+                OperationResult::Success("Info operation not yet implemented".to_string())
+            },
+        ))
     }
 
     async fn create(&self, package_name: &str) -> Result<EventStream, PackageError> {
-        let package_name = package_name.to_string();
-        let config = self.config.clone();
-
-        Ok(Self::create_event_stream(move |tx| async move {
-            let sender = EventSender::new(
-                tx,
-                OperationType::PackageCreate,
-                package_name.clone(),
-                config.environment().to_string(),
-            );
-
-            sender.send_started().await;
-
-            // TODO: Implement actual creation logic
-            let result =
-                OperationResult::Success("Create operation not yet implemented".to_string());
-            sender.send_completed(result).await;
-        }))
+        Ok(self.execute_operation(
+            OperationType::PackageCreate,
+            package_name,
+            OperationContext::default(),
+            |_sender| async move {
+                // TODO: Implement actual creation logic
+                OperationResult::Success("Create operation not yet implemented".to_string())
+            },
+        ))
     }
 }

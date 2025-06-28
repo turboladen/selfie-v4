@@ -55,7 +55,6 @@ where
     // Step 3: Get install command (reusing shared step with custom getter function)
     let install_cmd = match steps::get_command(
         env_config,
-        package_name,
         "install",
         |ec| Some(ec.install()),
         sender,

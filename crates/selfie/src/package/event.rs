@@ -28,11 +28,28 @@ impl EventSender {
         package_name: String,
         environment: String,
     ) -> Self {
+        Self::new_with_context(
+            tx,
+            operation_type,
+            package_name,
+            environment,
+            OperationContext::default(),
+        )
+    }
+
+    pub(crate) fn new_with_context(
+        tx: mpsc::Sender<PackageEvent>,
+        operation_type: OperationType,
+        package_name: String,
+        environment: String,
+        context: OperationContext,
+    ) -> Self {
         let operation_info = OperationInfo {
             id: Uuid::new_v4(),
             operation_type,
             package_name,
             environment,
+            context,
             timestamp: Instant::now(),
         };
 
@@ -214,8 +231,40 @@ pub struct OperationInfo {
     pub package_name: String,
     /// Environment context
     pub environment: String,
+    /// Additional operation-specific context
+    pub context: OperationContext,
     /// Timestamp when the event was created
     pub timestamp: Instant,
+}
+
+/// Additional context that operations might need
+///
+/// This provides a way to pass operation-specific data that doesn't belong
+/// in the core OperationInfo but is useful for certain operations.
+///
+/// # Examples
+///
+/// For package validation with a specific file path:
+/// ```rust,ignore
+/// let context = OperationContext {
+///     package_path: Some(PathBuf::from("/path/to/package.yml")),
+///     target_environment: None,
+/// };
+/// ```
+///
+/// For cross-environment operations:
+/// ```rust,ignore
+/// let context = OperationContext {
+///     package_path: None,
+///     target_environment: Some("production".to_string()),
+/// };
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct OperationContext {
+    /// Package file path (used by validate, create operations)
+    pub package_path: Option<std::path::PathBuf>,
+    /// Target environment for cross-environment operations
+    pub target_environment: Option<String>,
 }
 
 /// Result of an operation

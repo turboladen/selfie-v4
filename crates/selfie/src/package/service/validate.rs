@@ -17,7 +17,7 @@ pub(super) async fn handle_validate<PR, CR>(
     package_name: &str,
     repo: &PR,
     config: &AppConfig,
-    command_runner: &CR,
+    _command_runner: &CR,
     sender: &EventSender,
 ) -> OperationResult
 where

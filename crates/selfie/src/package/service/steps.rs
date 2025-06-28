@@ -83,7 +83,6 @@ pub async fn find_environment_config<'a>(
 /// Step to get a specific command from environment config
 pub async fn get_command<'a>(
     env_config: &'a EnvironmentConfig,
-    package_name: &str,
     command_type: &str,
     command_getter: impl FnOnce(&EnvironmentConfig) -> Option<&str>,
     sender: &EventSender,
