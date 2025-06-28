@@ -12,8 +12,7 @@ use selfie::{
 };
 
 use crate::{
-    event_processor::EventProcessor,
-    formatters::{FieldStyle, format_field},
+    event_processor::EventProcessor, formatters::format_key,
     terminal_progress_reporter::TerminalProgressReporter,
 };
 
@@ -71,8 +70,7 @@ fn create_package_info_table(package_info: &PackageInfoData, config: &AppConfig)
     let mut table = create_table();
 
     // Helper functions for formatting
-    let format_key =
-        |name: &str| -> String { format_field(name, FieldStyle::Key, config.use_colors()) };
+    let format_key_fn = |name: &str| -> String { format_key(name, config.use_colors()) };
 
     let format_value = |value: &str| -> String {
         if config.use_colors() {
@@ -83,14 +81,17 @@ fn create_package_info_table(package_info: &PackageInfoData, config: &AppConfig)
     };
 
     // Add the basic package info rows
-    table.add_row(vec![format_key("Name"), format_value(&package_info.name)]);
     table.add_row(vec![
-        format_key("Version"),
+        format_key_fn("Name"),
+        format_value(&package_info.name),
+    ]);
+    table.add_row(vec![
+        format_key_fn("Version"),
         format_value(&package_info.version),
     ]);
 
     if let Some(desc) = &package_info.description {
-        table.add_row(vec![format_key("Description"), format_value(desc)]);
+        table.add_row(vec![format_key_fn("Description"), format_value(desc)]);
     }
 
     if let Some(homepage) = &package_info.homepage {
@@ -99,7 +100,7 @@ fn create_package_info_table(package_info: &PackageInfoData, config: &AppConfig)
         } else {
             homepage.to_string()
         };
-        table.add_row(vec![format_key("Homepage"), homepage_value]);
+        table.add_row(vec![format_key_fn("Homepage"), homepage_value]);
     }
 
     // Format the environment names as a comma-separated list
@@ -108,7 +109,10 @@ fn create_package_info_table(package_info: &PackageInfoData, config: &AppConfig)
         &package_info.current_environment,
         config,
     );
-    table.add_row(vec![format_key("Environments"), format_value(&env_names)]);
+    table.add_row(vec![
+        format_key_fn("Environments"),
+        format_value(&env_names),
+    ]);
 
     table
 }

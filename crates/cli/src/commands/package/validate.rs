@@ -12,8 +12,7 @@ use selfie::{
 };
 
 use crate::{
-    event_processor::EventProcessor,
-    formatters::{FieldStyle, format_field},
+    event_processor::EventProcessor, formatters::format_key,
     terminal_progress_reporter::TerminalProgressReporter,
 };
 
@@ -78,21 +77,17 @@ fn display_validation_success_card(validation_result: &ValidationResultData, con
     println!();
     println!("📋 Validation Results:");
 
-    let format_key = |field: &str| -> String {
-        format!(
-            "   {}: ",
-            format_field(field, FieldStyle::Key, config.use_colors())
-        )
-    };
+    let format_key_fn =
+        |field: &str| -> String { format!("   {}: ", format_key(field, config.use_colors())) };
 
     println!(
         "{}{}",
-        format_key("Package"),
+        format_key_fn("Package"),
         validation_result.package_name
     );
     println!(
         "{}{}",
-        format_key("Environment"),
+        format_key_fn("Environment"),
         validation_result.environment
     );
 

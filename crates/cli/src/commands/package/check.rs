@@ -10,8 +10,7 @@ use selfie::{
 };
 
 use crate::{
-    event_processor::EventProcessor,
-    formatters::{FieldStyle, format_field},
+    event_processor::EventProcessor, formatters::format_key,
     terminal_progress_reporter::TerminalProgressReporter,
 };
 
@@ -72,18 +71,18 @@ fn display_check_result_card(check_result: &CheckResultData, config: &AppConfig)
     println!();
     println!("📋 Check Results:");
 
-    let format_key = |field: &str| -> String {
-        format!(
-            "   {}: ",
-            format_field(field, FieldStyle::Key, config.use_colors())
-        )
-    };
+    let format_key_fn =
+        |field: &str| -> String { format!("   {}: ", format_key(field, config.use_colors())) };
 
-    println!("{}{}", format_key("Package"), check_result.package_name);
-    println!("{}{}", format_key("Environment"), check_result.environment);
+    println!("{}{}", format_key_fn("Package"), check_result.package_name);
+    println!(
+        "{}{}",
+        format_key_fn("Environment"),
+        check_result.environment
+    );
 
     if let Some(cmd) = &check_result.check_command {
-        println!("{}{}", format_key("Command"), cmd);
+        println!("{}{}", format_key_fn("Command"), cmd);
     }
 
     // Format status with appropriate icon and color
@@ -91,12 +90,12 @@ fn display_check_result_card(check_result: &CheckResultData, config: &AppConfig)
         CheckResult::Success => {
             if config.use_colors() {
                 format!(
-                    "   {}: {}",
-                    console::style("Status").cyan().bold(),
+                    "{}{}",
+                    format_key_fn("Status"),
                     console::style("✅ Installed").green().bold()
                 )
             } else {
-                "   Status: ✅ Installed".to_string()
+                format!("{}✅ Installed", format_key_fn("Status"))
             }
         }
         CheckResult::Failed {
@@ -104,36 +103,18 @@ fn display_check_result_card(check_result: &CheckResultData, config: &AppConfig)
         } => {
             let status = if config.use_colors() {
                 format!(
-                    "   {}: {}",
-                    console::style("Status").cyan().bold(),
+                    "{}{}",
+                    format_key_fn("Status"),
                     console::style("❌ Not installed").red().bold()
                 )
             } else {
-                "   Status: ❌ Not installed".to_string()
+                format!("{}❌ Not installed", format_key_fn("Status"))
             };
 
             if !stderr.is_empty() {
-                format!(
-                    "{}\n   {}: {}",
-                    status,
-                    if config.use_colors() {
-                        console::style("Details").cyan().bold().to_string()
-                    } else {
-                        "Details".to_string()
-                    },
-                    stderr.trim()
-                )
+                format!("{}\n{}{}", status, format_key_fn("Details"), stderr.trim())
             } else if let Some(code) = exit_code {
-                format!(
-                    "{}\n   {}: Exit code {}",
-                    status,
-                    if config.use_colors() {
-                        console::style("Details").cyan().bold().to_string()
-                    } else {
-                        "Details".to_string()
-                    },
-                    code
-                )
+                format!("{}\n{}Exit code {}", status, format_key_fn("Details"), code)
             } else {
                 status
             }

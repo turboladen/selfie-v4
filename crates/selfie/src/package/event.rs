@@ -106,26 +106,6 @@ impl EventSender {
         .await;
     }
 
-    /// Send a cancellation event
-    pub(crate) async fn send_canceled(&self, reason: impl fmt::Display) {
-        let operation_info = self.touch_operation_info();
-        let reason = reason.to_string();
-
-        tracing::warn!(
-            operation_type = operation_info.operation_type.to_string(),
-            package_name = &operation_info.package_name,
-            environment = &operation_info.environment,
-            reason = &reason,
-            "operation canceled",
-        );
-
-        self.send(PackageEvent::Canceled {
-            operation_info,
-            reason,
-        })
-        .await;
-    }
-
     /// Send a log message at the specified level
     pub(crate) async fn send_log(&self, level: LogLevel, message: impl fmt::Display) {
         let operation_info = self.touch_operation_info();

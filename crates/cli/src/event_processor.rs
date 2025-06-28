@@ -5,22 +5,10 @@
 //!
 //! # Usage
 //!
-//! ## Basic Event Processing
+//! ## Event Processing with Custom Handlers
 //!
-//! For most commands, you can use the simple `process_events` method:
-//!
-//! ```rust,ignore
-//! use crate::{event_processor::EventProcessor, terminal_progress_reporter::TerminalProgressReporter};
-//!
-//! async fn handle_command(reporter: TerminalProgressReporter, event_stream: EventStream) -> i32 {
-//!     let processor = EventProcessor::new(reporter);
-//!     processor.process_events(event_stream).await
-//! }
-//! ```
-//!
-//! ## Custom Event Handling
-//!
-//! For commands that need special handling of certain events, use `process_events_with_handler`:
+//! All commands use `process_events_with_handler` which allows custom handling
+//! of specific events while providing default behavior for standard events:
 //!
 //! ```rust,ignore
 //! async fn handle_command_with_custom_progress(
@@ -79,23 +67,6 @@ impl EventProcessor {
     /// Create a new event processor with the given reporter
     pub fn new(reporter: TerminalProgressReporter) -> Self {
         Self { reporter }
-    }
-
-    /// Process all events from the stream and return the appropriate exit code
-    ///
-    /// This method consumes the entire event stream and handles each event type
-    /// appropriately, returning 0 for success or 1 for failure.
-    pub async fn process_events(self, mut stream: EventStream) -> i32 {
-        let mut exit_code = 0;
-
-        while let Some(event) = stream.next().await {
-            if self.handle_event(event, &mut exit_code) {
-                // Early termination requested
-                break;
-            }
-        }
-
-        exit_code
     }
 
     /// Process events from the stream with a custom event handler
@@ -286,7 +257,9 @@ mod tests {
 
         let events: Vec<PackageEvent> = vec![];
         let event_stream = Box::pin(stream::iter(events));
-        let exit_code = processor.process_events(event_stream).await;
+        let exit_code = processor
+            .process_events_with_handler(event_stream, |_event, _reporter| None)
+            .await;
 
         // Empty stream should return success
         assert_eq!(exit_code, 0);
@@ -343,7 +316,9 @@ mod tests {
 
         // Test with a nonexistent package - should get events but ultimately fail
         let event_stream = service.check("nonexistent-test-package").await;
-        let exit_code = processor.process_events(event_stream).await;
+        let exit_code = processor
+            .process_events_with_handler(event_stream, |_event, _reporter| None)
+            .await;
 
         // Should return error exit code since package doesn't exist
         assert_eq!(exit_code, 1);
