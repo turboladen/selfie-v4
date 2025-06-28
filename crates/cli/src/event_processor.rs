@@ -56,9 +56,15 @@
 //! - `None` to use the default handling for the event
 
 use futures::StreamExt;
-use selfie::package::event::{ConsoleOutput, EventStream, OperationResult, PackageEvent};
+use selfie::package::{
+    event::{ConsoleOutput, EventStream, OperationResult, PackageEvent, error::StreamedError},
+    port::{PackageListError, PackageRepoError},
+};
 
-use crate::terminal_progress_reporter::TerminalProgressReporter;
+use crate::{
+    commands::package::handle_directory_not_found,
+    terminal_progress_reporter::TerminalProgressReporter,
+};
 
 /// A reusable event processor for handling package operation events
 ///
@@ -160,8 +166,18 @@ impl EventProcessor {
             }
 
             PackageEvent::Error { message, error, .. } => {
-                self.reporter
-                    .report_error(format!("{}: {}", message, error));
+                // Check for specific error types that need special handling
+                match &error {
+                    StreamedError::PackageRepoError(PackageRepoError::PackageListError(
+                        PackageListError::PackageDirectoryNotFound(path),
+                    )) => {
+                        handle_directory_not_found(path, self.reporter);
+                    }
+                    _ => {
+                        self.reporter
+                            .report_error(format!("{}: {}", message, error));
+                    }
+                }
                 *exit_code = 1;
             }
 

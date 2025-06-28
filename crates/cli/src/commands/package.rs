@@ -235,7 +235,7 @@ fn handle_io_error(error: Arc<std::io::Error>, reporter: TerminalProgressReporte
     );
 }
 
-fn handle_directory_not_found(path: &Path, reporter: TerminalProgressReporter) {
+pub(crate) fn handle_directory_not_found(path: &Path, reporter: TerminalProgressReporter) {
     reporter.report_error("✗ Package Directory Not Found");
 
     reporter.report_info("The package directory does not exist:");
