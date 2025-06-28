@@ -1,12 +1,10 @@
-use std::{borrow::Cow, pin::Pin};
-
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use selfie::{
     commands::ShellCommandRunner,
     config::AppConfig,
     fs::real::RealFileSystem,
     package::{
-        event::{EventStream, PackageEvent, metadata::CheckMetadata},
+        event::{EventStream, PackageEvent},
         repository::YamlPackageRepository,
         service::{PackageService, PackageServiceImpl},
     },
@@ -36,7 +34,7 @@ pub(crate) async fn handle_check(
 }
 
 async fn process_check_event_stream(
-    mut event_stream: EventStream<CheckMetadata, Cow<'static, str>, Cow<'static, str>>,
+    mut event_stream: EventStream,
     reporter: TerminalProgressReporter,
 ) -> i32 {
     let mut exit_code = 0;
@@ -44,11 +42,10 @@ async fn process_check_event_stream(
     // Process each event as it comes in from the stream
     while let Some(event) = event_stream.next().await {
         match event {
-            PackageEvent::Started { metadata } => {
+            PackageEvent::Started { operation_info } => {
                 reporter.report_info(format!(
                     "Checking package '{}' in environment '{}'",
-                    metadata.command_metadata().package_name(),
-                    metadata.command_metadata().environment()
+                    operation_info.package_name, operation_info.environment
                 ));
             }
 
@@ -56,7 +53,7 @@ async fn process_check_event_stream(
                 reporter.report_progress(message);
             }
 
-            PackageEvent::Info { message, .. } => match message {
+            PackageEvent::Info { output, .. } => match output {
                 selfie::package::event::ConsoleOutput::Stdout(msg) => {
                     println!("{}", msg);
                 }
@@ -83,15 +80,13 @@ async fn process_check_event_stream(
                 exit_code = 1; // Set failure exit code
             }
 
-            PackageEvent::Completed {
-                result: message, ..
-            } => {
-                match message {
-                    Ok(msg) => {
+            PackageEvent::Completed { result, .. } => {
+                match result {
+                    selfie::package::event::OperationResult::Success(msg) => {
                         reporter.report_success(msg);
                         // Success message, but exit code might have been set earlier
                     }
-                    Err(err) => {
+                    selfie::package::event::OperationResult::Failure(err) => {
                         reporter.report_error(err);
                         exit_code = 1;
                     }

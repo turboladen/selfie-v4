@@ -3,64 +3,43 @@ mod install;
 mod steps;
 mod validate;
 
-use std::{borrow::Cow, path::PathBuf};
+use std::path::PathBuf;
 
 use tokio::sync::mpsc;
 use tracing::instrument;
 
 use super::{
-    event::{
-        EventSender, EventStream, PackageEvent,
-        metadata::{
-            CheckMetadata, CreateMetadata, InfoMetadata, InstallMetadata, ListMetadata,
-            OperationType, ValidateMetadata,
-        },
-    },
+    event::{EventSender, EventStream, OperationResult, PackageEvent, metadata::OperationType},
     port::PackageRepository,
 };
 
-use crate::{
-    commands::runner::CommandRunner, config::AppConfig, package::port::PackageError,
-    validation::ValidationIssues,
-};
+use crate::{commands::runner::CommandRunner, config::AppConfig, package::port::PackageError};
 
 /// Primary port for package operations
 #[cfg_attr(test, mockall::automock)]
 #[async_trait::async_trait]
 pub trait PackageService: Send + Sync {
     /// Run package's `check` command
-    async fn check(
-        &self,
-        package_name: &str,
-    ) -> EventStream<CheckMetadata, Cow<'static, str>, Cow<'static, str>>;
+    async fn check(&self, package_name: &str) -> EventStream;
 
     /// Install a package
-    async fn install(
-        &self,
-        package_name: &str,
-    ) -> EventStream<InstallMetadata, Cow<'static, str>, Cow<'static, str>>;
+    async fn install(&self, package_name: &str) -> EventStream;
 
     /// Get information about a package
-    async fn info(
-        &self,
-        package_name: &str,
-    ) -> Result<EventStream<InfoMetadata, (), ()>, PackageError>;
+    async fn info(&self, package_name: &str) -> Result<EventStream, PackageError>;
 
     /// Validate a package
     async fn validate(
         &self,
         package_name: &str,
         package_path: Option<PathBuf>,
-    ) -> Result<EventStream<ValidateMetadata, ValidationIssues, Cow<'static, str>>, PackageError>;
+    ) -> Result<EventStream, PackageError>;
 
     /// List available packages
-    async fn list(&self) -> Result<EventStream<ListMetadata, (), ()>, PackageError>;
+    async fn list(&self) -> Result<EventStream, PackageError>;
 
     /// Create a new package
-    async fn create(
-        &self,
-        package_name: &str,
-    ) -> Result<EventStream<CreateMetadata, (), ()>, PackageError>;
+    async fn create(&self, package_name: &str) -> Result<EventStream, PackageError>;
 }
 
 /// Implementation of the PackageService
@@ -85,13 +64,10 @@ where
     }
 
     // Helper to create an event stream
-    fn create_event_stream<F, Fut, M, O, E>(f: F) -> EventStream<M, O, E>
+    fn create_event_stream<F, Fut>(f: F) -> EventStream
     where
-        F: FnOnce(mpsc::Sender<PackageEvent<M, O, E>>) -> Fut + Send + 'static,
+        F: FnOnce(mpsc::Sender<PackageEvent>) -> Fut + Send + 'static,
         Fut: std::future::Future<Output = ()> + Send,
-        M: Send + 'static,
-        O: Send + 'static,
-        E: Send + 'static,
     {
         let (tx, rx) = mpsc::channel(32);
 
@@ -112,10 +88,7 @@ where
     CR: CommandRunner + Clone + std::fmt::Debug + Send + Sync + 'static,
 {
     #[instrument]
-    async fn check(
-        &self,
-        package_name: &str,
-    ) -> EventStream<CheckMetadata, Cow<'static, str>, Cow<'static, str>> {
+    async fn check(&self, package_name: &str) -> EventStream {
         // Clone what we need for the async task
         let repo = self.package_repository.clone();
         let command_runner = self.command_runner.clone();
@@ -126,7 +99,8 @@ where
             let sender = EventSender::new(
                 tx,
                 OperationType::PackageCheck,
-                CheckMetadata::new(config.environment().to_string(), package_name.to_string()),
+                package_name.clone(),
+                config.environment().to_string(),
             );
 
             sender.send_started().await;
@@ -145,10 +119,7 @@ where
 
     // Implementation for the install method
     #[instrument]
-    async fn install(
-        &self,
-        package_name: &str,
-    ) -> EventStream<InstallMetadata, Cow<'static, str>, Cow<'static, str>> {
+    async fn install(&self, package_name: &str) -> EventStream {
         // Clone what we need for the async task
         let repo = self.package_repository.clone();
         let command_runner = self.command_runner.clone();
@@ -159,7 +130,8 @@ where
             let sender = EventSender::new(
                 tx,
                 OperationType::PackageInstall,
-                InstallMetadata::new(config.environment().to_string(), package_name.to_string()),
+                package_name.clone(),
+                config.environment().to_string(),
             );
 
             sender.send_started().await;
@@ -190,8 +162,7 @@ where
         &self,
         package_name: &str,
         _package_path: Option<PathBuf>,
-    ) -> Result<EventStream<ValidateMetadata, ValidationIssues, Cow<'static, str>>, PackageError>
-    {
+    ) -> Result<EventStream, PackageError> {
         let repo = self.package_repository.clone();
         let command_runner = self.command_runner.clone();
         let config = self.config.clone();
@@ -201,7 +172,8 @@ where
             let sender = EventSender::new(
                 tx,
                 OperationType::PackageValidate,
-                ValidateMetadata::new(config.environment().to_string(), package_name.to_string()),
+                package_name.clone(),
+                config.environment().to_string(),
             );
             sender.send_started().await;
             let current_env = config.environment();
@@ -218,88 +190,65 @@ where
         }))
     }
 
-    async fn list(&self) -> Result<EventStream<ListMetadata, (), ()>, PackageError> {
+    async fn list(&self) -> Result<EventStream, PackageError> {
         // Clone what we need
-        // let fs = self.file_system.clone();
-        // let config = self.config.clone();
+        let config = self.config.clone();
 
         Ok(Self::create_event_stream(move |tx| async move {
-            todo!()
-            // let _ = tx
-            //     .send(PackageEvent::Started {
-            //         operation: "Listing available packages".to_string(),
-            //     })
-            //     .await;
-            //
-            // // Example implementation
-            // match fs.list_directory(config.package_directory()) {
-            //     Ok(entries) => {
-            //         let _ = tx
-            //             .send(PackageEvent::Info(format!(
-            //                 "Found {} packages",
-            //                 entries.len()
-            //             )))
-            //             .await;
-            //
-            //         for entry in entries {
-            //             if let Some(name) = entry.file_name().and_then(|n| n.to_str()) {
-            //                 let _ = tx.send(PackageEvent::Info(name.to_string())).await;
-            //             }
-            //         }
-            //
-            //         let _ = tx.send(PackageEvent::Completed).await;
-            //     }
-            //     Err(e) => {
-            //         let _ = tx
-            //             .send(PackageEvent::Error {
-            //                 message: format!("Failed to list packages: {}", e),
-            //                 recoverable: false,
-            //             })
-            //             .await;
-            //     }
-            // }
+            let sender = EventSender::new(
+                tx,
+                OperationType::PackageList,
+                "".to_string(), // No specific package for list operation
+                config.environment().to_string(),
+            );
+
+            sender.send_started().await;
+
+            // TODO: Implement actual listing logic
+            let result = OperationResult::Success("List operation not yet implemented".to_string());
+            sender.send_completed(result).await;
         }))
     }
 
-    async fn info(
-        &self,
-        package_name: &str,
-    ) -> Result<EventStream<InfoMetadata, (), ()>, PackageError> {
+    async fn info(&self, package_name: &str) -> Result<EventStream, PackageError> {
         // Implementation similar to other methods
-        // let package_name = package_name.to_string();
+        let package_name = package_name.to_string();
+        let config = self.config.clone();
 
         Ok(Self::create_event_stream(move |tx| async move {
-            todo!()
-            // let _ = tx
-            //     .send(PackageEvent::Started {
-            //         operation: format!("Getting info for package '{}'", package_name),
-            //     })
-            //     .await;
-            //
-            // // Info gathering would happen here...
-            //
-            // let _ = tx.send(PackageEvent::Completed).await;
+            let sender = EventSender::new(
+                tx,
+                OperationType::PackageInfo,
+                package_name.clone(),
+                config.environment().to_string(),
+            );
+
+            sender.send_started().await;
+
+            // TODO: Implement actual info logic
+            let result = OperationResult::Success("Info operation not yet implemented".to_string());
+            sender.send_completed(result).await;
         }))
     }
 
-    async fn create(
-        &self,
-        package_name: &str,
-    ) -> Result<EventStream<CreateMetadata, (), ()>, PackageError> {
-        // Implementation similar to other methods
-        // let package_name = package_name.to_string();
+    async fn create(&self, package_name: &str) -> Result<EventStream, PackageError> {
+        let package_name = package_name.to_string();
+        let config = self.config.clone();
 
         Ok(Self::create_event_stream(move |tx| async move {
-            todo!()
-            // let _ = tx
-            //     .send(PackageEvent::Started {
-            //         operation: format!("Creating package '{}'", package_name),
-            //     })
-            //     .await;
-            //
-            // // Package creation would happen here...
-            //
-            // let _ = tx.send(PackageEvent::Completed).await;
+            let sender = EventSender::new(
+                tx,
+                OperationType::PackageCreate,
+                package_name.clone(),
+                config.environment().to_string(),
+            );
+
+            sender.send_started().await;
+
+            // TODO: Implement actual creation logic
+            let result =
+                OperationResult::Success("Create operation not yet implemented".to_string());
+            sender.send_completed(result).await;
         }))
     }
 }

@@ -4,45 +4,56 @@ pub mod metadata;
 use std::{
     fmt::{self, Debug},
     pin::Pin,
+    time::Instant,
 };
 
 use futures::Stream;
 use tokio::sync::mpsc;
+use uuid::Uuid;
 
-use self::{
-    error::StreamedError,
-    metadata::{EventMetadata, OperationType},
-};
+use self::{error::StreamedError, metadata::OperationType};
 
-pub type EventStream<M, O, E> = Pin<Box<dyn Stream<Item = PackageEvent<M, O, E>> + Send>>;
+pub type EventStream = Pin<Box<dyn Stream<Item = PackageEvent> + Send>>;
 
 #[derive(Debug, Clone)]
-pub(crate) struct EventSender<M, O, E> {
-    metadata: EventMetadata<M>,
-    tx: mpsc::Sender<PackageEvent<M, O, E>>,
+pub(crate) struct EventSender {
+    operation_info: OperationInfo,
+    tx: mpsc::Sender<PackageEvent>,
 }
 
-impl<M: Debug + Clone, O, E> EventSender<M, O, E> {
+impl EventSender {
     pub(crate) fn new(
-        tx: mpsc::Sender<PackageEvent<M, O, E>>,
+        tx: mpsc::Sender<PackageEvent>,
         operation_type: OperationType,
-        command_metadata: M,
+        package_name: String,
+        environment: String,
     ) -> Self {
-        Self {
-            tx,
-            metadata: EventMetadata::new(operation_type, command_metadata),
-        }
+        let operation_info = OperationInfo {
+            id: Uuid::new_v4(),
+            operation_type,
+            package_name,
+            environment,
+            timestamp: Instant::now(),
+        };
+
+        Self { tx, operation_info }
+    }
+
+    pub(crate) async fn send(&self, event: PackageEvent) {
+        let _ = self.tx.send(event).await;
     }
 
     pub(crate) async fn send_started(&self) {
-        let metadata = self.metadata.touch_and_clone();
+        let operation_info = self.touch_operation_info();
 
         tracing::trace!(
-            operation_type = metadata.operation_type().to_string(),
-            command_metadata = ?metadata.command_metadata(),
+            operation_type = operation_info.operation_type.to_string(),
+            package_name = &operation_info.package_name,
+            environment = &operation_info.environment,
             "operation started",
         );
-        let _ = self.tx.send(PackageEvent::Started { metadata }).await;
+
+        self.send(PackageEvent::Started { operation_info }).await;
     }
 
     pub(crate) async fn send_progress(
@@ -51,178 +62,223 @@ impl<M: Debug + Clone, O, E> EventSender<M, O, E> {
         total_steps: u32,
         message: impl fmt::Display,
     ) {
-        let metadata = self.metadata.touch_and_clone();
+        let operation_info = self.touch_operation_info();
         let msg = message.to_string();
+
         tracing::info!(
-            operation_type = metadata.operation_type().to_string(),
-            command_metadata = ?metadata.command_metadata(),
+            operation_type = operation_info.operation_type.to_string(),
+            package_name = &operation_info.package_name,
+            environment = &operation_info.environment,
             message = &msg,
+            "operation progress",
         );
-        let _ = self
-            .tx
-            .send(PackageEvent::Progress {
-                metadata,
-                step,
-                total_steps,
-                percent_complete: step as f32 / total_steps as f32,
-                message: msg,
-            })
-            .await;
+
+        self.send(PackageEvent::Progress {
+            operation_info,
+            step,
+            total_steps,
+            percent_complete: step as f32 / total_steps as f32,
+            message: msg,
+        })
+        .await;
     }
 
-    pub(crate) async fn send_completed(&self, result: Result<O, E>) {
-        let metadata = self.metadata.touch_and_clone();
+    pub(crate) async fn send_completed(&self, result: OperationResult) {
+        let operation_info = self.touch_operation_info();
 
         tracing::info!(
-            operation_type = metadata.operation_type().to_string(),
-            command_metadata = ?metadata.command_metadata(),
-            "operation started",
+            operation_type = operation_info.operation_type.to_string(),
+            package_name = &operation_info.package_name,
+            environment = &operation_info.environment,
+            success = matches!(result, OperationResult::Success(_)),
+            "operation completed",
         );
-        let _ = self
-            .tx
-            .send(PackageEvent::Completed { metadata, result })
-            .await;
+
+        self.send(PackageEvent::Completed {
+            operation_info,
+            result,
+        })
+        .await;
     }
 
     pub(crate) async fn send_trace(&self, message: impl fmt::Display) {
-        let metadata = self.metadata.touch_and_clone();
+        let operation_info = self.touch_operation_info();
         let message = message.to_string();
 
         tracing::trace!(
-            operation_type = metadata.operation_type().to_string(),
-            command_metadata = ?metadata.command_metadata(),
+            operation_type = operation_info.operation_type.to_string(),
+            package_name = &operation_info.package_name,
+            environment = &operation_info.environment,
             message = &message,
         );
-        let _ = self
-            .tx
-            .send(PackageEvent::Trace { metadata, message })
-            .await;
+
+        self.send(PackageEvent::Trace {
+            operation_info,
+            message,
+        })
+        .await;
     }
 
     pub(crate) async fn send_debug(&self, message: impl fmt::Display) {
-        let metadata = self.metadata.touch_and_clone();
+        let operation_info = self.touch_operation_info();
         let message = message.to_string();
 
         tracing::debug!(
-            operation_type = metadata.operation_type().to_string(),
-            command_metadata = ?metadata.command_metadata(),
+            operation_type = operation_info.operation_type.to_string(),
+            package_name = &operation_info.package_name,
+            environment = &operation_info.environment,
             message = &message,
         );
-        let _ = self
-            .tx
-            .send(PackageEvent::Debug { metadata, message })
-            .await;
+
+        self.send(PackageEvent::Debug {
+            operation_info,
+            message,
+        })
+        .await;
     }
 
-    pub(crate) async fn send_info(&self, message: ConsoleOutput) {
-        let metadata = self.metadata.touch_and_clone();
+    pub(crate) async fn send_info(&self, output: ConsoleOutput) {
+        let operation_info = self.touch_operation_info();
 
         tracing::info!(
-            operation_type = metadata.operation_type().to_string(),
-            command_metadata = ?metadata.command_metadata(),
-            message = ?&message,
+            operation_type = operation_info.operation_type.to_string(),
+            package_name = &operation_info.package_name,
+            environment = &operation_info.environment,
+            output = ?&output,
         );
-        let _ = self.tx.send(PackageEvent::Info { metadata, message }).await;
+
+        self.send(PackageEvent::Info {
+            operation_info,
+            output,
+        })
+        .await;
     }
 
     pub(crate) async fn send_warning(&self, message: impl fmt::Display) {
-        let metadata = self.metadata.touch_and_clone();
+        let operation_info = self.touch_operation_info();
         let msg = message.to_string();
+
         tracing::warn!(
-            operation_type = metadata.operation_type().to_string(),
-            command_metadata = ?metadata.command_metadata(),
+            operation_type = operation_info.operation_type.to_string(),
+            package_name = &operation_info.package_name,
+            environment = &operation_info.environment,
             message = &msg,
         );
-        let _ = self
-            .tx
-            .send(PackageEvent::Warning {
-                metadata,
-                message: msg,
-            })
-            .await;
+
+        self.send(PackageEvent::Warning {
+            operation_info,
+            message: msg,
+        })
+        .await;
     }
 
     pub(crate) async fn send_error<SE>(&self, error: SE, message: impl fmt::Display)
     where
         StreamedError: From<SE>,
     {
-        let metadata = self.metadata.touch_and_clone();
+        let operation_info = self.touch_operation_info();
         let msg = message.to_string();
+        let streamed_error = StreamedError::from(error);
+
         tracing::error!(
-            operation_type = metadata.operation_type().to_string(),
-            command_metadata = ?metadata.command_metadata(),
+            operation_type = operation_info.operation_type.to_string(),
+            package_name = &operation_info.package_name,
+            environment = &operation_info.environment,
             message = &msg,
+            error = %streamed_error,
         );
-        let _ = self
-            .tx
-            .send(PackageEvent::Error {
-                metadata,
-                error: StreamedError::from(error),
-                message: msg,
-            })
-            .await;
+
+        self.send(PackageEvent::Error {
+            operation_info,
+            error: streamed_error,
+            message: msg,
+        })
+        .await;
     }
+
+    fn touch_operation_info(&self) -> OperationInfo {
+        let mut info = self.operation_info.clone();
+        info.timestamp = Instant::now();
+        info
+    }
+}
+
+/// Information about the operation that generated an event
+#[derive(Debug, Clone)]
+pub struct OperationInfo {
+    /// Unique ID for the operation
+    pub id: Uuid,
+    /// Type of operation
+    pub operation_type: OperationType,
+    /// Name of the package being operated on
+    pub package_name: String,
+    /// Environment context
+    pub environment: String,
+    /// Timestamp when the event was created
+    pub timestamp: Instant,
+}
+
+/// Result of an operation
+#[derive(Debug, Clone)]
+pub enum OperationResult {
+    Success(String),
+    Failure(String),
 }
 
 /// Events that can be emitted during package operations
 #[derive(Debug, Clone)]
-pub enum PackageEvent<M, O, E> {
+pub enum PackageEvent {
     /// Operation has started
-    Started { metadata: EventMetadata<M> },
+    Started { operation_info: OperationInfo },
 
     /// Progress update
     Progress {
-        metadata: EventMetadata<M>,
+        operation_info: OperationInfo,
         step: u32,
         total_steps: u32,
         percent_complete: f32,
         message: String,
     },
 
-    // InputRequested {
-    //     metadata: EventMetadata<T>,
-    //     prompt: String,
-    //     options: Option<Vec<String>>,
-    // },
-    /// Operation completed successfully
+    /// Operation completed
     Completed {
-        metadata: EventMetadata<M>,
-        // result: Option<serde_json::Value>,
-        result: Result<O, E>,
+        operation_info: OperationInfo,
+        result: OperationResult,
     },
 
     /// Operation was canceled
     Canceled {
-        metadata: EventMetadata<M>,
+        operation_info: OperationInfo,
         reason: String,
     },
 
+    /// Trace-level message
     Trace {
-        metadata: EventMetadata<M>,
+        operation_info: OperationInfo,
         message: String,
     },
 
+    /// Debug-level message
     Debug {
-        metadata: EventMetadata<M>,
+        operation_info: OperationInfo,
         message: String,
     },
 
-    /// Informational message
+    /// Informational message with console output
     Info {
-        metadata: EventMetadata<M>,
-        // message: String,
-        message: ConsoleOutput,
+        operation_info: OperationInfo,
+        output: ConsoleOutput,
     },
 
     /// Warning message
     Warning {
-        metadata: EventMetadata<M>,
+        operation_info: OperationInfo,
         message: String,
     },
 
     /// Error occurred but operation continues
     Error {
-        metadata: EventMetadata<M>,
+        operation_info: OperationInfo,
         error: StreamedError,
         message: String,
     },

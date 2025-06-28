@@ -2,13 +2,11 @@
 //! Helps break down the pieces of running the `package install` command.
 //!
 
-use std::borrow::Cow;
-
 use crate::{
     commands::runner::CommandRunner,
     config::AppConfig,
     package::{
-        event::{EventSender, metadata::InstallMetadata},
+        event::{EventSender, OperationResult},
         port::PackageRepository,
     },
 };
@@ -20,24 +18,42 @@ pub(super) async fn handle_install<PR, CR>(
     repo: &PR,
     config: &AppConfig,
     command_runner: &CR,
-    sender: &EventSender<InstallMetadata, Cow<'static, str>, Cow<'static, str>>,
+    sender: &EventSender,
     step: &mut u32,
     total_steps: u32,
-) -> Result<Cow<'static, str>, Cow<'static, str>>
+) -> OperationResult
 where
     PR: PackageRepository,
     CR: CommandRunner,
 {
     // Step 1: Fetch package (reusing shared step)
-    let package = steps::fetch_package(repo, package_name, sender, step, total_steps).await?;
+    let package = match steps::fetch_package(repo, package_name, sender, step, total_steps).await {
+        Ok(pkg) => pkg,
+        Err(err) => {
+            let error_msg = format!("Failed to fetch package '{}': {}", package_name, err);
+            return OperationResult::Failure(error_msg);
+        }
+    };
 
     // Step 2: Find environment configuration (reusing shared step)
-    let env_config =
-        steps::find_environment_config(&package, config.environment(), sender, step, total_steps)
-            .await?;
+    let env_config = match steps::find_environment_config(
+        &package,
+        config.environment(),
+        sender,
+        step,
+        total_steps,
+    )
+    .await
+    {
+        Ok(config) => config,
+        Err(err) => {
+            let error_msg = format!("Environment configuration error: {}", err);
+            return OperationResult::Failure(error_msg);
+        }
+    };
 
     // Step 3: Get install command (reusing shared step with custom getter function)
-    let install_cmd = steps::get_command(
+    let install_cmd = match steps::get_command(
         env_config,
         package_name,
         "install",
@@ -46,7 +62,14 @@ where
         step,
         total_steps,
     )
-    .await?;
+    .await
+    {
+        Ok(cmd) => cmd,
+        Err(err) => {
+            let error_msg = format!("Install command error: {}", err);
+            return OperationResult::Failure(error_msg);
+        }
+    };
 
     // Step 4: Execute install command (reusing shared step)
     let is_success = match steps::execute_command(
@@ -61,7 +84,10 @@ where
     .await
     {
         Ok(success) => success,
-        Err(e) => return Err(e),
+        Err(err) => {
+            let error_msg = format!("Command execution error: {}", err);
+            return OperationResult::Failure(error_msg);
+        }
     };
 
     // Step 5: Process result
@@ -69,7 +95,7 @@ where
         sender
             .send_progress(*step, total_steps, "Package installed successfully")
             .await;
-        Ok("Installation completed".into())
+        OperationResult::Success("Installation completed".to_string())
     } else {
         sender
             .send_warning(format!(
@@ -77,6 +103,6 @@ where
                 package_name
             ))
             .await;
-        Err("Installation failed".into())
+        OperationResult::Failure("Installation failed".to_string())
     }
 }

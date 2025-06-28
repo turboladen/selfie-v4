@@ -7,16 +7,15 @@ use crate::{
 };
 
 /// Step to fetch a package from the repository
-pub async fn fetch_package<PR, M, O, E>(
+pub async fn fetch_package<PR>(
     repo: &PR,
     package_name: &str,
-    sender: &EventSender<M, O, E>,
+    sender: &EventSender,
     step: &mut u32,
     total_steps: u32,
 ) -> Result<Package, &'static str>
 where
     PR: PackageRepository,
-    M: std::fmt::Debug + Clone,
 {
     sender
         .send_progress(
@@ -42,16 +41,13 @@ where
 }
 
 /// Step to find environment configuration for a package
-pub async fn find_environment_config<'a, M, O, E>(
+pub async fn find_environment_config<'a>(
     package: &'a Package,
     environment: &str,
-    sender: &EventSender<M, O, E>,
+    sender: &EventSender,
     step: &mut u32,
     total_steps: u32,
-) -> Result<&'a EnvironmentConfig, Cow<'static, str>>
-where
-    M: std::fmt::Debug + Clone,
-{
+) -> Result<&'a EnvironmentConfig, Cow<'static, str>> {
     sender
         .send_progress(
             *step,
@@ -85,18 +81,15 @@ where
 }
 
 /// Step to get a specific command from environment config
-pub async fn get_command<'a, M, O, E>(
+pub async fn get_command<'a>(
     env_config: &'a EnvironmentConfig,
     package_name: &str,
     command_type: &str,
     command_getter: impl FnOnce(&EnvironmentConfig) -> Option<&str>,
-    sender: &EventSender<M, O, E>,
+    sender: &EventSender,
     step: &mut u32,
     total_steps: u32,
-) -> Result<&'a str, Cow<'static, str>>
-where
-    M: std::fmt::Debug + Clone,
-{
+) -> Result<&'a str, Cow<'static, str>> {
     sender
         .send_progress(
             *step,
@@ -127,18 +120,17 @@ where
 }
 
 /// Step to execute a command
-pub async fn execute_command<CR, M, O, E>(
+pub async fn execute_command<CR>(
     command_runner: &CR,
     cmd: &str,
     command_type: &str,
     config: &AppConfig,
-    sender: &EventSender<M, O, E>,
+    sender: &EventSender,
     step: &mut u32,
     total_steps: u32,
 ) -> Result<bool, Cow<'static, str>>
 where
     CR: CommandRunner,
-    M: std::fmt::Debug + Clone,
 {
     sender
         .send_progress(

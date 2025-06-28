@@ -1,16 +1,10 @@
 //! Helps break down the pieces of running the `package check` command.
-//!
-//! This module now uses hexagonal architecture by delegating to application services
-//! that contain the core business logic, separated from infrastructure concerns.
-
-use std::borrow::Cow;
 
 use crate::{
     commands::runner::CommandRunner,
     config::AppConfig,
     package::{
-        application::adapters::CheckServiceAdapter,
-        event::{EventSender, metadata::CheckMetadata},
+        event::{EventSender, OperationResult},
         port::PackageRepository,
     },
 };
@@ -22,15 +16,98 @@ pub(super) async fn handle_check<PR, CR>(
     repo: &PR,
     config: &AppConfig,
     command_runner: &CR,
-    sender: &EventSender<CheckMetadata, Cow<'static, str>, Cow<'static, str>>,
-) -> Result<Cow<'static, str>, Cow<'static, str>>
+    sender: &EventSender,
+) -> OperationResult
 where
     PR: PackageRepository + Clone,
     CR: CommandRunner + Clone,
 {
-    // Create adapter that bridges to hexagonal architecture
-    let adapter = CheckServiceAdapter::new(repo.clone(), command_runner.clone(), config.clone());
+    sender
+        .send_progress(1, TOTAL_STEPS, "Loading package definition")
+        .await;
 
-    // Delegate to the application service through the adapter
-    adapter.handle_check(package_name, sender).await
+    // Step 1: Load package from repository
+    let package = match repo.get_package(package_name) {
+        Ok(pkg) => {
+            sender
+                .send_debug(format!("Successfully loaded package: {}", package_name))
+                .await;
+            pkg
+        }
+        Err(err) => {
+            let error_msg = format!("Failed to load package '{}': {}", package_name, err);
+            sender.send_error(err, &error_msg).await;
+            return OperationResult::Failure(error_msg);
+        }
+    };
+
+    sender
+        .send_progress(2, TOTAL_STEPS, "Checking package environment")
+        .await;
+
+    // Step 2: Get environment-specific check command
+    let current_env = config.environment();
+    let env_config = match package.environments().get(current_env) {
+        Some(config) => config,
+        None => {
+            let error_msg = format!(
+                "No configuration found for package '{}' in environment '{}'",
+                package_name, current_env
+            );
+            sender.send_warning(&error_msg).await;
+            return OperationResult::Failure(error_msg);
+        }
+    };
+
+    let check_command = match &env_config.check {
+        Some(cmd) => {
+            sender
+                .send_debug(format!(
+                    "Found check command for environment '{}': {}",
+                    current_env, cmd
+                ))
+                .await;
+            cmd
+        }
+        None => {
+            let error_msg = format!(
+                "No check command defined for package '{}' in environment '{}'",
+                package_name, current_env
+            );
+            sender.send_warning(&error_msg).await;
+            return OperationResult::Failure(error_msg);
+        }
+    };
+
+    sender
+        .send_progress(3, TOTAL_STEPS, "Running package check command")
+        .await;
+
+    // Step 3: Execute the check command
+    match command_runner.execute(check_command).await {
+        Ok(output) => {
+            if output.is_success() {
+                let success_msg =
+                    format!("Package '{}' check completed successfully", package_name);
+                sender
+                    .send_debug(format!("Check command output: {}", output.stdout_str()))
+                    .await;
+                OperationResult::Success(success_msg)
+            } else {
+                let error_msg = format!("Package '{}' check failed", package_name);
+                sender
+                    .send_warning(format!("Check command stderr: {}", output.stderr_str()))
+                    .await;
+                OperationResult::Failure(error_msg)
+            }
+        }
+        Err(err) => {
+            let error_msg = format!(
+                "Failed to execute check command for package '{}': {}",
+                package_name, err
+            );
+            sender.send_error(err, &error_msg).await;
+            OperationResult::Failure(error_msg)
+        }
+    }
 }
