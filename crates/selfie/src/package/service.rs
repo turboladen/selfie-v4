@@ -41,18 +41,6 @@ impl ProgressTracker {
             .await;
     }
 
-    /// Send progress with custom message that already includes step information
-    pub(crate) async fn send_custom(&self, sender: &EventSender, message: impl std::fmt::Display) {
-        sender
-            .send_progress(self.current_step, self.total_steps, message)
-            .await;
-    }
-
-    /// Check if this is the final step
-    pub(crate) fn is_final_step(&self) -> bool {
-        self.current_step >= self.total_steps
-    }
-
     pub(crate) fn current_step(&self) -> u32 {
         self.current_step
     }

@@ -8,7 +8,6 @@ pub(crate) enum FieldStyle {
     Key,   // Table keys, field names
     Value, // Values in tables/output
     Title, // Section titles
-    Custom(fn(console::StyledObject<String>) -> console::StyledObject<String>),
 }
 
 /// Format text with consistent styling based on field type
@@ -34,6 +33,5 @@ pub(crate) fn format_field<T: Display>(
         FieldStyle::Key => styled.cyan().to_string(),
         FieldStyle::Value => styled.white().to_string(),
         FieldStyle::Title => styled.magenta().to_string(),
-        FieldStyle::Custom(styler) => styler(styled).to_string(),
     }
 }

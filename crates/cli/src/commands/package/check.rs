@@ -1,16 +1,16 @@
-use futures::StreamExt;
 use selfie::{
     commands::ShellCommandRunner,
     config::AppConfig,
     fs::real::RealFileSystem,
     package::{
-        event::{EventStream, PackageEvent},
         repository::YamlPackageRepository,
         service::{PackageService, PackageServiceImpl},
     },
 };
 
-use crate::terminal_progress_reporter::TerminalProgressReporter;
+use crate::{
+    event_processor::EventProcessor, terminal_progress_reporter::TerminalProgressReporter,
+};
 
 pub(crate) async fn handle_check(
     package_name: &str,
@@ -29,76 +29,33 @@ pub(crate) async fn handle_check(
     // Call the service's check method to get an event stream
     let event_stream = service.check(package_name).await;
 
-    // Process the event stream and display progress in the terminal
-    process_check_event_stream(event_stream, reporter).await
-}
+    // Process the event stream using the reusable event processor with custom handling
+    let processor = EventProcessor::new(reporter);
 
-async fn process_check_event_stream(
-    mut event_stream: EventStream,
-    reporter: TerminalProgressReporter,
-) -> i32 {
-    let mut exit_code = 0;
-
-    // Process each event as it comes in from the stream
-    while let Some(event) = event_stream.next().await {
-        match event {
-            PackageEvent::Started { operation_info } => {
-                reporter.report_info(format!(
-                    "Checking package '{}' in environment '{}'",
-                    operation_info.package_name, operation_info.environment
-                ));
-            }
-
-            PackageEvent::Progress { message, .. } => {
-                reporter.report_progress(message);
-            }
-
-            PackageEvent::Info { output, .. } => match output {
-                selfie::package::event::ConsoleOutput::Stdout(msg) => {
-                    println!("{}", msg);
+    // Example of custom event handling for Progress events
+    processor
+        .process_events_with_handler(event_stream, |event, reporter| {
+            match event {
+                // Custom handling for progress events - show percentage
+                selfie::package::event::PackageEvent::Progress {
+                    percent_complete,
+                    step,
+                    total_steps,
+                    message,
+                    ..
+                } => {
+                    reporter.report_progress(format!(
+                        "[{:.0}%] Step {}/{}: {}",
+                        percent_complete * 100.0,
+                        step,
+                        total_steps,
+                        message
+                    ));
+                    Some(true) // Continue processing
                 }
-                selfie::package::event::ConsoleOutput::Stderr(msg) => {
-                    eprintln!("{}", msg);
-                }
-            },
-
-            PackageEvent::Trace { message, .. } => {
-                tracing::trace!("{}", message);
+                // Let default handler handle all other events
+                _ => None,
             }
-
-            PackageEvent::Debug { message, .. } => {
-                tracing::debug!("{}", message);
-            }
-
-            PackageEvent::Warning { message, .. } => {
-                reporter.report_warning(message);
-                // Warnings don't necessarily mean failure
-            }
-
-            PackageEvent::Error { message, error, .. } => {
-                reporter.report_error(format!("{}: {}", message, error));
-                exit_code = 1; // Set failure exit code
-            }
-
-            PackageEvent::Completed { result, .. } => {
-                match result {
-                    selfie::package::event::OperationResult::Success(msg) => {
-                        reporter.report_success(msg);
-                        // Success message, but exit code might have been set earlier
-                    }
-                    selfie::package::event::OperationResult::Failure(err) => {
-                        reporter.report_error(err);
-                        exit_code = 1;
-                    }
-                }
-            }
-
-            PackageEvent::Canceled { reason, .. } => {
-                reporter.report_warning(format!("Operation canceled: {}", reason));
-                exit_code = 1;
-            }
-        }
-    }
-
-    exit_code
+        })
+        .await
 }

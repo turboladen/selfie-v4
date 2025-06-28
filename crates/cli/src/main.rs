@@ -1,6 +1,7 @@
 mod cli;
 mod commands;
 mod config;
+mod event_processor;
 mod formatters;
 mod tables;
 mod terminal_progress_reporter;
