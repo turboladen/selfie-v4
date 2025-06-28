@@ -1,5 +1,7 @@
 mod check;
+mod info;
 mod install;
+mod list;
 mod steps;
 mod validate;
 
@@ -271,27 +273,34 @@ where
     }
 
     async fn list(&self) -> Result<EventStream, PackageError> {
-        Ok(self.execute_operation(
+        Ok(self.execute_operation_with_deps(
             OperationType::PackageList,
             "", // No specific package for list operation
             OperationContext::default(),
-            1, // Just one step for listing
-            |_sender, mut _progress| async move {
-                // TODO: Implement actual listing logic
-                OperationResult::Success("List operation not yet implemented".to_string())
+            3, // Load packages + process + finalize
+            move |repo, command_runner, config, sender, mut progress| async move {
+                list::handle_list(&repo, &config, &command_runner, &sender, &mut progress).await
             },
         ))
     }
 
     async fn info(&self, package_name: &str) -> Result<EventStream, PackageError> {
-        Ok(self.execute_operation(
+        let package_name_owned = package_name.to_string();
+        Ok(self.execute_operation_with_deps(
             OperationType::PackageInfo,
             package_name,
             OperationContext::default(),
-            1, // Just one step for info
-            |_sender, mut _progress| async move {
-                // TODO: Implement actual info logic
-                OperationResult::Success("Info operation not yet implemented".to_string())
+            3, // Load package + gather info + check status
+            move |repo, command_runner, config, sender, mut progress| async move {
+                info::handle_info(
+                    &package_name_owned,
+                    &repo,
+                    &config,
+                    &command_runner,
+                    &sender,
+                    &mut progress,
+                )
+                .await
             },
         ))
     }

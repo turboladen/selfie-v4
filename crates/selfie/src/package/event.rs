@@ -230,6 +230,26 @@ impl EventSender {
         self.send_log(LogLevel::Warning, message).await;
     }
 
+    /// Send package information data
+    pub(crate) async fn send_package_info(&self, package_info: PackageInfoData) {
+        let operation_info = self.touch_operation_info();
+        self.send(PackageEvent::PackageInfoLoaded {
+            operation_info,
+            package_info,
+        })
+        .await;
+    }
+
+    /// Send environment status data
+    pub(crate) async fn send_environment_status(&self, environment_status: EnvironmentStatusData) {
+        let operation_info = self.touch_operation_info();
+        self.send(PackageEvent::EnvironmentStatusChecked {
+            operation_info,
+            environment_status,
+        })
+        .await;
+    }
+
     fn touch_operation_info(&self) -> OperationInfo {
         let mut info = self.operation_info.clone();
         info.timestamp = Instant::now();
@@ -348,6 +368,48 @@ pub enum PackageEvent {
         error: StreamedError,
         message: String,
     },
+
+    /// Package information loaded
+    PackageInfoLoaded {
+        operation_info: OperationInfo,
+        package_info: PackageInfoData,
+    },
+
+    /// Environment status checked
+    EnvironmentStatusChecked {
+        operation_info: OperationInfo,
+        environment_status: EnvironmentStatusData,
+    },
+}
+
+/// Structured data for package information
+#[derive(Debug, Clone)]
+pub struct PackageInfoData {
+    pub name: String,
+    pub version: String,
+    pub description: Option<String>,
+    pub homepage: Option<String>,
+    pub environments: Vec<String>,
+    pub current_environment: String,
+}
+
+/// Structured data for environment status
+#[derive(Debug, Clone)]
+pub struct EnvironmentStatusData {
+    pub environment_name: String,
+    pub is_current: bool,
+    pub install_command: String,
+    pub check_command: Option<String>,
+    pub dependencies: Vec<String>,
+    pub status: Option<EnvironmentStatus>,
+}
+
+/// Status of a package in an environment
+#[derive(Debug, Clone)]
+pub enum EnvironmentStatus {
+    Installed,
+    NotInstalled,
+    Unknown(String),
 }
 
 /// Log levels for the EventSender log method

@@ -52,7 +52,7 @@ async fn dispatch_package_command(
         PackageSubcommands::Check { package_name } => {
             package::check::handle_check(package_name, config, reporter).await
         }
-        PackageSubcommands::List => ListCommand::new(config, reporter).handle_command(),
+        PackageSubcommands::List => ListCommand::new(config, reporter).handle_command().await,
         PackageSubcommands::Info { package_name } => {
             package::info::handle_info(package_name, config, reporter).await
         }
@@ -60,7 +60,7 @@ async fn dispatch_package_command(
             package::create::handle_create(package_name, config, reporter)
         }
         PackageSubcommands::Validate { package_name } => {
-            package::validate::handle_validate(package_name, config, reporter)
+            package::validate::handle_validate(package_name, config, reporter).await
         }
     }
 }

@@ -1,16 +1,18 @@
 use comfy_table::{ContentArrangement, Table, modifiers, presets};
 use console::style;
 use selfie::{
-    commands::{ShellCommandRunner, runner::CommandRunner},
+    commands::ShellCommandRunner,
     config::AppConfig,
     fs::real::RealFileSystem,
-    package::{port::PackageRepository, repository::YamlPackageRepository},
+    package::{
+        event::{EnvironmentStatus, EnvironmentStatusData, PackageEvent, PackageInfoData},
+        repository::YamlPackageRepository,
+        service::{PackageService, PackageServiceImpl},
+    },
 };
 
 use crate::{
-    commands::package::handle_package_repo_error,
-    formatters::{self, FieldStyle},
-    terminal_progress_reporter::TerminalProgressReporter,
+    event_processor::EventProcessor, terminal_progress_reporter::TerminalProgressReporter,
 };
 
 pub(crate) async fn handle_info(
@@ -20,85 +22,166 @@ pub(crate) async fn handle_info(
 ) -> i32 {
     tracing::debug!("Finding package info for: {}", package_name);
 
+    // Create the repository and command runner
     let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().to_path_buf());
     let command_runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
 
-    match repo.get_package(package_name) {
-        Ok(package) => {
-            // Helper function for formatting field names in the left column
-            let format_field = |name: &str| -> String {
-                formatters::format_field(name, FieldStyle::Key, config.use_colors())
-            };
+    // Create the package service implementation
+    let service = PackageServiceImpl::new(repo, command_runner, config.clone());
 
-            // Helper function for formatting values in the right column
-            let format_value = |value: &str| -> String {
-                formatters::format_field(value, FieldStyle::Value, config.use_colors())
-            };
-
-            // Create and display main package info table
-            let table = create_package_info_table(&package, config, format_field, format_value);
-            println!("{table}");
-            println!(); // Space between tables
-
-            // Create and display environment tables
-            let env_tables =
-                create_environment_tables(&package, config, &command_runner, format_value).await;
-            for table in env_tables {
-                println!("{table}");
-                println!(); // Add space between environment tables
-            }
-
-            0
+    // Call the service's info method to get an event stream
+    match service.info(package_name).await {
+        Ok(event_stream) => {
+            // Process the event stream with custom handling for structured data
+            let processor = EventProcessor::new(reporter);
+            processor
+                .process_events_with_handler(event_stream, |event, _reporter| {
+                    handle_info_event(event, config)
+                })
+                .await
         }
         Err(e) => {
-            let repo: &dyn PackageRepository = &repo;
-            handle_package_repo_error(e, repo, reporter);
+            reporter.report_error(format!("Failed to get package info: {}", e));
             1
         }
     }
 }
 
-fn create_package_info_table<F, V>(
-    package: &selfie::package::Package,
-    config: &AppConfig,
-    format_field: F,
-    format_value: V,
-) -> Table
-where
-    F: Fn(&str) -> String,
-    V: Fn(&str) -> String,
-{
+fn handle_info_event(event: &PackageEvent, config: &AppConfig) -> Option<bool> {
+    match event {
+        PackageEvent::PackageInfoLoaded { package_info, .. } => {
+            let table = create_package_info_table(package_info, config);
+            println!("{}", table);
+            Some(true) // Continue processing
+        }
+        PackageEvent::EnvironmentStatusChecked {
+            environment_status, ..
+        } => {
+            let table = create_environment_table(environment_status, config);
+            println!("\n{}", table);
+            Some(true) // Continue processing
+        }
+        _ => None, // Use default handling for other events
+    }
+}
+
+fn create_package_info_table(package_info: &PackageInfoData, config: &AppConfig) -> Table {
     let mut table = create_table();
 
+    // Helper functions for formatting
+    let format_field = |name: &str| -> String {
+        if config.use_colors() {
+            style(name).cyan().bold().to_string()
+        } else {
+            name.to_string()
+        }
+    };
+
+    let format_value = |value: &str| -> String {
+        if config.use_colors() {
+            style(value).white().to_string()
+        } else {
+            value.to_string()
+        }
+    };
+
     // Add the basic package info rows
-    table.add_row(vec![format_field("Name"), format_value(package.name())]);
+    table.add_row(vec![format_field("Name"), format_value(&package_info.name)]);
     table.add_row(vec![
         format_field("Version"),
-        format_value(package.version()),
+        format_value(&package_info.version),
     ]);
 
-    if let Some(desc) = package.description() {
+    if let Some(desc) = &package_info.description {
         table.add_row(vec![format_field("Description"), format_value(desc)]);
     }
 
-    if let Some(homepage) = package.homepage() {
-        table.add_row(vec![
-            format_field("Homepage"),
-            if config.use_colors() {
-                style(homepage).underlined().blue().to_string()
-            } else {
-                homepage.to_string()
-            },
-        ]);
+    if let Some(homepage) = &package_info.homepage {
+        let homepage_value = if config.use_colors() {
+            style(homepage).underlined().blue().to_string()
+        } else {
+            homepage.to_string()
+        };
+        table.add_row(vec![format_field("Homepage"), homepage_value]);
     }
 
     // Format the environment names as a comma-separated list
-    let env_names = format_environment_names(package, config);
-
-    // Add environments row with list of environment names
+    let env_names = format_environment_names(
+        &package_info.environments,
+        &package_info.current_environment,
+        config,
+    );
     table.add_row(vec![format_field("Environments"), format_value(&env_names)]);
 
     table
+}
+
+fn create_environment_table(env_status: &EnvironmentStatusData, config: &AppConfig) -> Table {
+    let mut env_table = create_table();
+
+    // Create a header for the environment table
+    let env_header = if env_status.is_current {
+        let msg = format!("Environment: *{}", env_status.environment_name);
+        if config.use_colors() {
+            style(msg).bold().green().to_string()
+        } else {
+            msg
+        }
+    } else {
+        let msg = format!("Environment: {}", env_status.environment_name);
+        if config.use_colors() {
+            style(msg).bold().to_string()
+        } else {
+            msg
+        }
+    };
+
+    // Add a header row
+    env_table.set_header(vec![env_header, String::new()]);
+
+    // Format environment detail keys
+    let format_env_key = |key: &str| -> String {
+        if config.use_colors() {
+            style(key).magenta().to_string()
+        } else {
+            key.to_string()
+        }
+    };
+
+    let format_env_value = |value: &str| -> String {
+        if config.use_colors() {
+            style(value).white().to_string()
+        } else {
+            value.to_string()
+        }
+    };
+
+    // Add installation status if this is the current environment and we have status
+    if env_status.is_current {
+        if let Some(status) = &env_status.status {
+            let status_text = format_status(status, config.use_colors());
+            env_table.add_row(vec![format_env_key("Status"), status_text]);
+        }
+    }
+
+    // Add environment detail rows
+    env_table.add_row(vec![
+        format_env_key("Install"),
+        format_env_value(&env_status.install_command),
+    ]);
+
+    if let Some(check) = &env_status.check_command {
+        env_table.add_row(vec![format_env_key("Check"), format_env_value(check)]);
+    }
+
+    if !env_status.dependencies.is_empty() {
+        env_table.add_row(vec![
+            format_env_key("Dependencies"),
+            format_env_value(&env_status.dependencies.join(", ")),
+        ]);
+    }
+
+    env_table
 }
 
 fn create_table() -> Table {
@@ -110,12 +193,15 @@ fn create_table() -> Table {
     table
 }
 
-fn format_environment_names(package: &selfie::package::Package, config: &AppConfig) -> String {
-    package
-        .environments()
-        .keys()
+fn format_environment_names(
+    environments: &[String],
+    current_environment: &str,
+    config: &AppConfig,
+) -> String {
+    environments
+        .iter()
         .map(|name| {
-            if name == config.environment() {
+            if name == current_environment {
                 if config.use_colors() {
                     format!("{}", style(format!("*{name}")).green().bold())
                 } else {
@@ -129,119 +215,29 @@ fn format_environment_names(package: &selfie::package::Package, config: &AppConf
         .join(", ")
 }
 
-async fn create_environment_tables<V>(
-    package: &selfie::package::Package,
-    config: &AppConfig,
-    command_runner: &ShellCommandRunner,
-    format_value: V,
-) -> Vec<Table>
-where
-    V: Fn(&str) -> String,
-{
-    let mut tables = Vec::new();
-
-    for (env_name, env_config) in package.environments() {
-        // Create environment details table
-        let mut env_table = create_table();
-
-        // Create a header for the environment table
-        let env_header = if env_name == config.environment() {
-            let msg = format!("Environment: *{env_name}");
-            if config.use_colors() {
-                style(msg).bold().green().to_string()
+fn format_status(status: &EnvironmentStatus, use_colors: bool) -> String {
+    match status {
+        EnvironmentStatus::Installed => {
+            if use_colors {
+                style("Installed ✓").green().bold().to_string()
             } else {
-                msg
+                "Installed ✓".to_string()
             }
-        } else {
-            let msg = format!("Environment: {env_name}");
-            if config.use_colors() {
-                style(msg).bold().to_string()
-            } else {
-                msg
-            }
-        };
-
-        // Add a header row
-        env_table.set_header(vec![env_header, String::new()]);
-
-        // Format environment detail keys
-        let format_env_key = |key: &str| -> String {
-            if config.use_colors() {
-                style(key).magenta().to_string()
-            } else {
-                key.to_string()
-            }
-        };
-
-        // Add installation status if this is the current environment
-        if env_name == config.environment() {
-            let status =
-                get_installation_status(env_config, command_runner, config.use_colors()).await;
-            env_table.add_row(vec![format_env_key("Status"), status]);
         }
-
-        // Add environment detail rows
-        env_table.add_row(vec![
-            format_env_key("Install"),
-            format_value(env_config.install()),
-        ]);
-
-        if let Some(check) = env_config.check() {
-            env_table.add_row(vec![format_env_key("Check"), format_value(check)]);
-        }
-
-        if !env_config.dependencies().is_empty() {
-            env_table.add_row(vec![
-                format_env_key("Dependencies"),
-                format_value(&env_config.dependencies().join(", ")),
-            ]);
-        }
-
-        tables.push(env_table);
-    }
-
-    tables
-}
-async fn get_installation_status(
-    env_config: &selfie::package::EnvironmentConfig,
-    command_runner: &ShellCommandRunner,
-    use_colors: bool,
-) -> String {
-    // Only run check for current environment
-    if let Some(check_cmd) = env_config.check() {
-        // Run the check command asynchronously
-        if let Ok(output) = command_runner.execute(check_cmd).await {
-            if output.is_success() {
-                if use_colors {
-                    style("Installed ✓").green().bold().to_string()
-                } else {
-                    "Installed ✓".to_string()
-                }
-            } else if use_colors {
+        EnvironmentStatus::NotInstalled => {
+            if use_colors {
                 style("Not installed ✗").yellow().to_string()
             } else {
                 "Not installed ✗".to_string()
             }
-        } else {
-            // Error executing check command
-            if use_colors {
-                style("Unknown (check failed)")
-                    .yellow()
-                    .italic()
-                    .to_string()
-            } else {
-                "Unknown (check failed)".to_string()
-            }
         }
-    } else {
-        // No check command available
-        if use_colors {
-            style("Unknown (no check command)")
-                .dim()
-                .italic()
-                .to_string()
-        } else {
-            "Unknown (no check command)".to_string()
+        EnvironmentStatus::Unknown(reason) => {
+            let msg = format!("Unknown ({})", reason);
+            if use_colors {
+                style(msg).yellow().italic().to_string()
+            } else {
+                msg
+            }
         }
     }
 }

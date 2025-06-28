@@ -181,6 +181,16 @@ impl EventProcessor {
                 *exit_code = 1;
                 return true; // Stop processing after cancellation
             }
+
+            PackageEvent::PackageInfoLoaded { .. } => {
+                // These structured events are handled by command-specific handlers
+                // If no custom handler processed them, just continue
+            }
+
+            PackageEvent::EnvironmentStatusChecked { .. } => {
+                // These structured events are handled by command-specific handlers
+                // If no custom handler processed them, just continue
+            }
         }
 
         false // Continue processing
