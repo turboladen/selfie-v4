@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{borrow::Cow, pin::Pin};
 
 use futures::{Stream, StreamExt};
 use selfie::{
@@ -6,7 +6,7 @@ use selfie::{
     config::AppConfig,
     fs::real::RealFileSystem,
     package::{
-        event::{PackageEvent, metadata::CheckMetadata},
+        event::{EventStream, PackageEvent, metadata::CheckMetadata},
         repository::YamlPackageRepository,
         service::{PackageService, PackageServiceImpl},
     },
@@ -36,7 +36,7 @@ pub(crate) async fn handle_check(
 }
 
 async fn process_check_event_stream(
-    mut event_stream: Pin<Box<dyn Stream<Item = PackageEvent<CheckMetadata>> + Send>>,
+    mut event_stream: EventStream<CheckMetadata, Cow<'static, str>, Cow<'static, str>>,
     reporter: TerminalProgressReporter,
 ) -> i32 {
     let mut exit_code = 0;
@@ -83,7 +83,9 @@ async fn process_check_event_stream(
                 exit_code = 1; // Set failure exit code
             }
 
-            PackageEvent::Completed { message, .. } => {
+            PackageEvent::Completed {
+                result: message, ..
+            } => {
                 match message {
                     Ok(msg) => {
                         reporter.report_success(msg);

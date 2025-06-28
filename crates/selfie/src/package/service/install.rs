@@ -20,7 +20,7 @@ pub(super) async fn handle_install<PR, CR>(
     repo: &PR,
     config: &AppConfig,
     command_runner: &CR,
-    sender: &EventSender<InstallMetadata>,
+    sender: &EventSender<InstallMetadata, Cow<'static, str>, Cow<'static, str>>,
     step: &mut u32,
     total_steps: u32,
 ) -> Result<Cow<'static, str>, Cow<'static, str>>

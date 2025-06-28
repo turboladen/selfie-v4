@@ -1,8 +1,9 @@
 mod check;
 mod install;
 mod steps;
+mod validate;
 
-use std::path::PathBuf;
+use std::{borrow::Cow, path::PathBuf};
 
 use tokio::sync::mpsc;
 use tracing::instrument;
@@ -18,34 +19,48 @@ use super::{
     port::PackageRepository,
 };
 
-use crate::{commands::runner::CommandRunner, config::AppConfig, package::port::PackageError};
+use crate::{
+    commands::runner::CommandRunner, config::AppConfig, package::port::PackageError,
+    validation::ValidationIssues,
+};
 
 /// Primary port for package operations
 #[cfg_attr(test, mockall::automock)]
 #[async_trait::async_trait]
 pub trait PackageService: Send + Sync {
     /// Run package's `check` command
-    async fn check(&self, package_name: &str) -> EventStream<CheckMetadata>;
+    async fn check(
+        &self,
+        package_name: &str,
+    ) -> EventStream<CheckMetadata, Cow<'static, str>, Cow<'static, str>>;
 
     /// Install a package
-    async fn install(&self, package_name: &str) -> EventStream<InstallMetadata>;
+    async fn install(
+        &self,
+        package_name: &str,
+    ) -> EventStream<InstallMetadata, Cow<'static, str>, Cow<'static, str>>;
 
     /// Get information about a package
-    async fn info(&self, package_name: &str) -> Result<EventStream<InfoMetadata>, PackageError>;
+    async fn info(
+        &self,
+        package_name: &str,
+    ) -> Result<EventStream<InfoMetadata, (), ()>, PackageError>;
 
     /// Validate a package
     async fn validate(
         &self,
         package_name: &str,
         package_path: Option<PathBuf>,
-    ) -> Result<EventStream<ValidateMetadata>, PackageError>;
+    ) -> Result<EventStream<ValidateMetadata, ValidationIssues, Cow<'static, str>>, PackageError>;
 
     /// List available packages
-    async fn list(&self) -> Result<EventStream<ListMetadata>, PackageError>;
+    async fn list(&self) -> Result<EventStream<ListMetadata, (), ()>, PackageError>;
 
     /// Create a new package
-    async fn create(&self, package_name: &str)
-    -> Result<EventStream<CreateMetadata>, PackageError>;
+    async fn create(
+        &self,
+        package_name: &str,
+    ) -> Result<EventStream<CreateMetadata, (), ()>, PackageError>;
 }
 
 /// Implementation of the PackageService
@@ -70,11 +85,13 @@ where
     }
 
     // Helper to create an event stream
-    fn create_event_stream<F, Fut, T>(f: F) -> EventStream<T>
+    fn create_event_stream<F, Fut, M, O, E>(f: F) -> EventStream<M, O, E>
     where
-        F: FnOnce(mpsc::Sender<PackageEvent<T>>) -> Fut + Send + 'static,
+        F: FnOnce(mpsc::Sender<PackageEvent<M, O, E>>) -> Fut + Send + 'static,
         Fut: std::future::Future<Output = ()> + Send,
-        T: Send + 'static,
+        M: Send + 'static,
+        O: Send + 'static,
+        E: Send + 'static,
     {
         let (tx, rx) = mpsc::channel(32);
 
@@ -95,7 +112,10 @@ where
     CR: CommandRunner + Clone + std::fmt::Debug + Send + Sync + 'static,
 {
     #[instrument]
-    async fn check(&self, package_name: &str) -> EventStream<CheckMetadata> {
+    async fn check(
+        &self,
+        package_name: &str,
+    ) -> EventStream<CheckMetadata, Cow<'static, str>, Cow<'static, str>> {
         // Clone what we need for the async task
         let repo = self.package_repository.clone();
         let command_runner = self.command_runner.clone();
@@ -116,34 +136,8 @@ where
                 .send_trace(format!("Current environment: {}", current_env))
                 .await;
 
-            let mut step = 1;
-            let total_steps = 12345;
-
-            // ╭─────────────────────────╮
-            // │ Step 1: Get the package │
-            // ╰─────────────────────────╯
-            sender
-                .send_progress(
-                    step,
-                    total_steps,
-                    format!("Fetching package: {package_name}"),
-                )
-                .await;
-            step += 1;
-
-            let result = check::handle_check(
-                &package_name,
-                &repo,
-                &config,
-                &command_runner,
-                &sender,
-                &mut step,
-                total_steps,
-            )
-            .await;
-            // let result = PackageFinder::new(repo, &sender, step, total_steps)
-            //     .find_package_then(&package_name, |package| todo!())
-            //     .await;
+            let result =
+                check::handle_check(&package_name, &repo, &config, &command_runner, &sender).await;
 
             sender.send_completed(result).await
         })
@@ -151,7 +145,10 @@ where
 
     // Implementation for the install method
     #[instrument]
-    async fn install(&self, package_name: &str) -> EventStream<InstallMetadata> {
+    async fn install(
+        &self,
+        package_name: &str,
+    ) -> EventStream<InstallMetadata, Cow<'static, str>, Cow<'static, str>> {
         // Clone what we need for the async task
         let repo = self.package_repository.clone();
         let command_runner = self.command_runner.clone();
@@ -193,25 +190,35 @@ where
         &self,
         package_name: &str,
         _package_path: Option<PathBuf>,
-    ) -> Result<EventStream<ValidateMetadata>, PackageError> {
-        // Implementation similar to install
-        // let package_name = package_name.to_string();
+    ) -> Result<EventStream<ValidateMetadata, ValidationIssues, Cow<'static, str>>, PackageError>
+    {
+        let repo = self.package_repository.clone();
+        let command_runner = self.command_runner.clone();
+        let config = self.config.clone();
+        let package_name = package_name.to_string();
 
         Ok(Self::create_event_stream(move |tx| async move {
-            todo!()
-            // let _ = tx
-            //     .send(PackageEvent::Started {
-            //         operation: format!("Validating package '{}'", package_name),
-            //     })
-            //     .await;
-            //
-            // // Validation would happen here...
-            //
-            // let _ = tx.send(PackageEvent::Completed).await;
+            let sender = EventSender::new(
+                tx,
+                OperationType::PackageValidate,
+                ValidateMetadata::new(config.environment().to_string(), package_name.to_string()),
+            );
+            sender.send_started().await;
+            let current_env = config.environment();
+
+            sender
+                .send_trace(format!("Current environment: {}", current_env))
+                .await;
+
+            let result =
+                validate::handle_validate(&package_name, &repo, &config, &command_runner, &sender)
+                    .await;
+
+            sender.send_completed(result).await
         }))
     }
 
-    async fn list(&self) -> Result<EventStream<ListMetadata>, PackageError> {
+    async fn list(&self) -> Result<EventStream<ListMetadata, (), ()>, PackageError> {
         // Clone what we need
         // let fs = self.file_system.clone();
         // let config = self.config.clone();
@@ -254,7 +261,10 @@ where
         }))
     }
 
-    async fn info(&self, package_name: &str) -> Result<EventStream<InfoMetadata>, PackageError> {
+    async fn info(
+        &self,
+        package_name: &str,
+    ) -> Result<EventStream<InfoMetadata, (), ()>, PackageError> {
         // Implementation similar to other methods
         // let package_name = package_name.to_string();
 
@@ -275,7 +285,7 @@ where
     async fn create(
         &self,
         package_name: &str,
-    ) -> Result<EventStream<CreateMetadata>, PackageError> {
+    ) -> Result<EventStream<CreateMetadata, (), ()>, PackageError> {
         // Implementation similar to other methods
         // let package_name = package_name.to_string();
 

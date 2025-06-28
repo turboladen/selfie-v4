@@ -7,10 +7,10 @@ use crate::{
 };
 
 /// Step to fetch a package from the repository
-pub async fn fetch_package<PR, M>(
+pub async fn fetch_package<PR, M, O, E>(
     repo: &PR,
     package_name: &str,
-    sender: &EventSender<M>,
+    sender: &EventSender<M, O, E>,
     step: &mut u32,
     total_steps: u32,
 ) -> Result<Package, &'static str>
@@ -42,10 +42,10 @@ where
 }
 
 /// Step to find environment configuration for a package
-pub async fn find_environment_config<'a, M>(
+pub async fn find_environment_config<'a, M, O, E>(
     package: &'a Package,
     environment: &str,
-    sender: &EventSender<M>,
+    sender: &EventSender<M, O, E>,
     step: &mut u32,
     total_steps: u32,
 ) -> Result<&'a EnvironmentConfig, Cow<'static, str>>
@@ -85,12 +85,12 @@ where
 }
 
 /// Step to get a specific command from environment config
-pub async fn get_command<'a, M>(
+pub async fn get_command<'a, M, O, E>(
     env_config: &'a EnvironmentConfig,
     package_name: &str,
     command_type: &str,
     command_getter: impl FnOnce(&EnvironmentConfig) -> Option<&str>,
-    sender: &EventSender<M>,
+    sender: &EventSender<M, O, E>,
     step: &mut u32,
     total_steps: u32,
 ) -> Result<&'a str, Cow<'static, str>>
@@ -127,12 +127,12 @@ where
 }
 
 /// Step to execute a command
-pub async fn execute_command<CR, M>(
+pub async fn execute_command<CR, M, O, E>(
     command_runner: &CR,
     cmd: &str,
     command_type: &str,
     config: &AppConfig,
-    sender: &EventSender<M>,
+    sender: &EventSender<M, O, E>,
     step: &mut u32,
     total_steps: u32,
 ) -> Result<bool, Cow<'static, str>>

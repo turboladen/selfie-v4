@@ -123,7 +123,27 @@ impl InstallMetadata {
 pub struct InfoMetadata;
 
 #[derive(Debug, Clone)]
-pub struct ValidateMetadata;
+pub struct ValidateMetadata {
+    environment: String,
+    package_name: String
+}
+
+impl ValidateMetadata {
+    pub fn new(environment: String, package_name: String) -> Self {
+        Self {
+            environment,
+            package_name,
+        }
+    }
+
+    pub fn environment(&self) -> &str {
+        &self.environment
+    }
+
+    pub fn package_name(&self) -> &str {
+        &self.package_name
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ListMetadata;

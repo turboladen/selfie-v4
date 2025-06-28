@@ -14,19 +14,19 @@ use self::{
     metadata::{EventMetadata, OperationType},
 };
 
-pub type EventStream<T> = Pin<Box<dyn Stream<Item = PackageEvent<T>> + Send>>;
+pub type EventStream<M, O, E> = Pin<Box<dyn Stream<Item = PackageEvent<M, O, E>> + Send>>;
 
 #[derive(Debug, Clone)]
-pub(crate) struct EventSender<T> {
-    metadata: EventMetadata<T>,
-    tx: mpsc::Sender<PackageEvent<T>>,
+pub(crate) struct EventSender<M, O, E> {
+    metadata: EventMetadata<M>,
+    tx: mpsc::Sender<PackageEvent<M, O, E>>,
 }
 
-impl<T: Debug + Clone> EventSender<T> {
+impl<M: Debug + Clone, O, E> EventSender<M, O, E> {
     pub(crate) fn new(
-        tx: mpsc::Sender<PackageEvent<T>>,
+        tx: mpsc::Sender<PackageEvent<M, O, E>>,
         operation_type: OperationType,
-        command_metadata: T,
+        command_metadata: M,
     ) -> Self {
         Self {
             tx,
@@ -70,12 +70,8 @@ impl<T: Debug + Clone> EventSender<T> {
             .await;
     }
 
-    pub(crate) async fn send_completed(
-        &self,
-        message: Result<impl fmt::Display, impl fmt::Display>,
-    ) {
+    pub(crate) async fn send_completed(&self, result: Result<O, E>) {
         let metadata = self.metadata.touch_and_clone();
-        let message = message.map(|m| m.to_string()).map_err(|e| e.to_string());
 
         tracing::info!(
             operation_type = metadata.operation_type().to_string(),
@@ -84,7 +80,7 @@ impl<T: Debug + Clone> EventSender<T> {
         );
         let _ = self
             .tx
-            .send(PackageEvent::Completed { metadata, message })
+            .send(PackageEvent::Completed { metadata, result })
             .await;
     }
 
@@ -146,9 +142,9 @@ impl<T: Debug + Clone> EventSender<T> {
             .await;
     }
 
-    pub(crate) async fn send_error<E>(&self, error: E, message: impl fmt::Display)
+    pub(crate) async fn send_error<SE>(&self, error: SE, message: impl fmt::Display)
     where
-        StreamedError: From<E>,
+        StreamedError: From<SE>,
     {
         let metadata = self.metadata.touch_and_clone();
         let msg = message.to_string();
@@ -170,13 +166,13 @@ impl<T: Debug + Clone> EventSender<T> {
 
 /// Events that can be emitted during package operations
 #[derive(Debug, Clone)]
-pub enum PackageEvent<T> {
+pub enum PackageEvent<M, O, E> {
     /// Operation has started
-    Started { metadata: EventMetadata<T> },
+    Started { metadata: EventMetadata<M> },
 
     /// Progress update
     Progress {
-        metadata: EventMetadata<T>,
+        metadata: EventMetadata<M>,
         step: u32,
         total_steps: u32,
         percent_complete: f32,
@@ -190,43 +186,43 @@ pub enum PackageEvent<T> {
     // },
     /// Operation completed successfully
     Completed {
-        metadata: EventMetadata<T>,
+        metadata: EventMetadata<M>,
         // result: Option<serde_json::Value>,
-        message: Result<String, String>,
+        result: Result<O, E>,
     },
 
     /// Operation was canceled
     Canceled {
-        metadata: EventMetadata<T>,
+        metadata: EventMetadata<M>,
         reason: String,
     },
 
     Trace {
-        metadata: EventMetadata<T>,
+        metadata: EventMetadata<M>,
         message: String,
     },
 
     Debug {
-        metadata: EventMetadata<T>,
+        metadata: EventMetadata<M>,
         message: String,
     },
 
     /// Informational message
     Info {
-        metadata: EventMetadata<T>,
+        metadata: EventMetadata<M>,
         // message: String,
         message: ConsoleOutput,
     },
 
     /// Warning message
     Warning {
-        metadata: EventMetadata<T>,
+        metadata: EventMetadata<M>,
         message: String,
     },
 
     /// Error occurred but operation continues
     Error {
-        metadata: EventMetadata<T>,
+        metadata: EventMetadata<M>,
         error: StreamedError,
         message: String,
     },
