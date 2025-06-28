@@ -60,6 +60,7 @@ impl EventSender {
         let _ = self.tx.send(event).await;
     }
 
+    /// Send a started event for the operation
     pub(crate) async fn send_started(&self) {
         let operation_info = self.touch_operation_info();
 
@@ -73,6 +74,7 @@ impl EventSender {
         self.send(PackageEvent::Started { operation_info }).await;
     }
 
+    /// Send a progress update
     pub(crate) async fn send_progress(
         &self,
         step: u32,
@@ -100,6 +102,7 @@ impl EventSender {
         .await;
     }
 
+    /// Send a completion event with the operation result
     pub(crate) async fn send_completed(&self, result: OperationResult) {
         let operation_info = self.touch_operation_info();
 
@@ -118,42 +121,75 @@ impl EventSender {
         .await;
     }
 
-    pub(crate) async fn send_trace(&self, message: impl fmt::Display) {
+    /// Send a cancellation event
+    pub(crate) async fn send_canceled(&self, reason: impl fmt::Display) {
         let operation_info = self.touch_operation_info();
-        let message = message.to_string();
+        let reason = reason.to_string();
 
-        tracing::trace!(
+        tracing::warn!(
             operation_type = operation_info.operation_type.to_string(),
             package_name = &operation_info.package_name,
             environment = &operation_info.environment,
-            message = &message,
+            reason = &reason,
+            "operation canceled",
         );
 
-        self.send(PackageEvent::Trace {
+        self.send(PackageEvent::Canceled {
             operation_info,
-            message,
+            reason,
         })
         .await;
     }
 
-    pub(crate) async fn send_debug(&self, message: impl fmt::Display) {
+    /// Send a log message at the specified level
+    pub(crate) async fn send_log(&self, level: LogLevel, message: impl fmt::Display) {
         let operation_info = self.touch_operation_info();
         let message = message.to_string();
 
-        tracing::debug!(
-            operation_type = operation_info.operation_type.to_string(),
-            package_name = &operation_info.package_name,
-            environment = &operation_info.environment,
-            message = &message,
-        );
-
-        self.send(PackageEvent::Debug {
-            operation_info,
-            message,
-        })
-        .await;
+        match level {
+            LogLevel::Trace => {
+                tracing::trace!(
+                    operation_type = operation_info.operation_type.to_string(),
+                    package_name = &operation_info.package_name,
+                    environment = &operation_info.environment,
+                    message = &message,
+                );
+                self.send(PackageEvent::Trace {
+                    operation_info,
+                    message,
+                })
+                .await;
+            }
+            LogLevel::Debug => {
+                tracing::debug!(
+                    operation_type = operation_info.operation_type.to_string(),
+                    package_name = &operation_info.package_name,
+                    environment = &operation_info.environment,
+                    message = &message,
+                );
+                self.send(PackageEvent::Debug {
+                    operation_info,
+                    message,
+                })
+                .await;
+            }
+            LogLevel::Warning => {
+                tracing::warn!(
+                    operation_type = operation_info.operation_type.to_string(),
+                    package_name = &operation_info.package_name,
+                    environment = &operation_info.environment,
+                    message = &message,
+                );
+                self.send(PackageEvent::Warning {
+                    operation_info,
+                    message,
+                })
+                .await;
+            }
+        }
     }
 
+    /// Send informational output to the console
     pub(crate) async fn send_info(&self, output: ConsoleOutput) {
         let operation_info = self.touch_operation_info();
 
@@ -171,24 +207,7 @@ impl EventSender {
         .await;
     }
 
-    pub(crate) async fn send_warning(&self, message: impl fmt::Display) {
-        let operation_info = self.touch_operation_info();
-        let msg = message.to_string();
-
-        tracing::warn!(
-            operation_type = operation_info.operation_type.to_string(),
-            package_name = &operation_info.package_name,
-            environment = &operation_info.environment,
-            message = &msg,
-        );
-
-        self.send(PackageEvent::Warning {
-            operation_info,
-            message: msg,
-        })
-        .await;
-    }
-
+    /// Send an error event
     pub(crate) async fn send_error<SE>(&self, error: SE, message: impl fmt::Display)
     where
         StreamedError: From<SE>,
@@ -211,6 +230,19 @@ impl EventSender {
             message: msg,
         })
         .await;
+    }
+
+    // Convenience methods for common logging levels
+    pub(crate) async fn send_trace(&self, message: impl fmt::Display) {
+        self.send_log(LogLevel::Trace, message).await;
+    }
+
+    pub(crate) async fn send_debug(&self, message: impl fmt::Display) {
+        self.send_log(LogLevel::Debug, message).await;
+    }
+
+    pub(crate) async fn send_warning(&self, message: impl fmt::Display) {
+        self.send_log(LogLevel::Warning, message).await;
     }
 
     fn touch_operation_info(&self) -> OperationInfo {
@@ -331,6 +363,14 @@ pub enum PackageEvent {
         error: StreamedError,
         message: String,
     },
+}
+
+/// Log levels for the EventSender log method
+#[derive(Debug, Clone, Copy)]
+pub enum LogLevel {
+    Trace,
+    Debug,
+    Warning,
 }
 
 #[derive(Debug, Clone)]
