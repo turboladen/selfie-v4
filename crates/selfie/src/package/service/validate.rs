@@ -11,25 +11,20 @@ use crate::{
     },
 };
 
-pub(super) const TOTAL_STEPS: u32 = 3;
-
 pub(super) async fn handle_validate<PR, CR>(
     package_name: &str,
     repo: &PR,
     config: &AppConfig,
     _command_runner: &CR,
     sender: &EventSender,
+    progress: &mut crate::package::service::ProgressTracker,
 ) -> OperationResult
 where
     PR: PackageRepository,
     CR: CommandRunner,
 {
-    let mut step = 1;
-
     // Step 1: Fetch package
-    sender
-        .send_progress(step, TOTAL_STEPS, "Loading package definition")
-        .await;
+    progress.next(sender, "Loading package definition").await;
 
     let package = match repo.get_package(package_name) {
         Ok(pkg) => {
@@ -44,21 +39,15 @@ where
             return OperationResult::Failure(error_msg);
         }
     };
-    step += 1;
 
     // Step 2: Validate the package for the current environment
-    sender
-        .send_progress(step, TOTAL_STEPS, "Validating package definition")
-        .await;
+    progress.next(sender, "Validating package definition").await;
 
     let validation_result = package.validate(config.environment());
     let issues = validation_result.issues();
-    step += 1;
 
     // Step 3: Process validation results
-    sender
-        .send_progress(step, TOTAL_STEPS, "Processing validation results")
-        .await;
+    progress.next(sender, "Processing validation results").await;
 
     if issues.has_errors() {
         let error_count = issues.errors().len();
@@ -77,8 +66,12 @@ where
         }
 
         let error_msg = format!(
-            "Package '{}' validation failed with {} error(s) and {} warning(s)",
-            package_name, error_count, warning_count
+            "Package '{}' validation failed with {} error(s) and {} warning(s) (completed {}/{} steps)",
+            package_name,
+            error_count,
+            warning_count,
+            progress.current_step(),
+            progress.total_steps()
         );
         OperationResult::Failure(error_msg)
     } else if issues.has_warnings() {
@@ -91,14 +84,19 @@ where
         }
 
         let success_msg = format!(
-            "Package '{}' validation completed with {} warning(s)",
-            package_name, warning_count
+            "Package '{}' validation completed with {} warning(s) ({}/{} steps)",
+            package_name,
+            warning_count,
+            progress.current_step(),
+            progress.total_steps()
         );
         OperationResult::Success(success_msg)
     } else {
         let success_msg = format!(
-            "Package '{}' validation completed successfully",
-            package_name
+            "Package '{}' validation completed successfully ({}/{} steps)",
+            package_name,
+            progress.current_step(),
+            progress.total_steps()
         );
         sender
             .send_debug("Package definition is valid for the current environment")

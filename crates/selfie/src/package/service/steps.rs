@@ -11,20 +11,14 @@ pub async fn fetch_package<PR>(
     repo: &PR,
     package_name: &str,
     sender: &EventSender,
-    step: &mut u32,
-    total_steps: u32,
+    progress: &mut crate::package::service::ProgressTracker,
 ) -> Result<Package, &'static str>
 where
     PR: PackageRepository,
 {
-    sender
-        .send_progress(
-            *step,
-            total_steps,
-            format!("Fetching package: {package_name}"),
-        )
+    progress
+        .next(sender, format!("Fetching package: {package_name}"))
         .await;
-    *step += 1;
 
     match repo.get_package(package_name) {
         Ok(package) => {
@@ -45,20 +39,17 @@ pub async fn find_environment_config<'a>(
     package: &'a Package,
     environment: &str,
     sender: &EventSender,
-    step: &mut u32,
-    total_steps: u32,
+    progress: &mut crate::package::service::ProgressTracker,
 ) -> Result<&'a EnvironmentConfig, Cow<'static, str>> {
-    sender
-        .send_progress(
-            *step,
-            total_steps,
+    progress
+        .next(
+            sender,
             format!(
                 "Checking if package supports current environment: {}",
                 environment
             ),
         )
         .await;
-    *step += 1;
 
     match package.environments().get(environment) {
         Some(env_config) => {
@@ -86,17 +77,14 @@ pub async fn get_command<'a>(
     command_type: &str,
     command_getter: impl FnOnce(&EnvironmentConfig) -> Option<&str>,
     sender: &EventSender,
-    step: &mut u32,
-    total_steps: u32,
+    progress: &mut crate::package::service::ProgressTracker,
 ) -> Result<&'a str, Cow<'static, str>> {
-    sender
-        .send_progress(
-            *step,
-            total_steps,
+    progress
+        .next(
+            sender,
             format!("Checking if package has `{command_type}` command"),
         )
         .await;
-    *step += 1;
 
     match command_getter(env_config) {
         Some(cmd) => {
@@ -106,10 +94,9 @@ pub async fn get_command<'a>(
             Ok(cmd)
         }
         None => {
-            sender
-                .send_progress(
-                    *step,
-                    total_steps,
+            progress
+                .next(
+                    sender,
                     format!("Package does not have `{command_type}` command"),
                 )
                 .await;
@@ -125,20 +112,19 @@ pub async fn execute_command<CR>(
     command_type: &str,
     config: &AppConfig,
     sender: &EventSender,
-    step: &mut u32,
-    total_steps: u32,
+    progress: &mut crate::package::service::ProgressTracker,
 ) -> Result<bool, Cow<'static, str>>
 where
     CR: CommandRunner,
 {
-    sender
-        .send_progress(
-            *step,
-            total_steps,
-            format!("Executing package's `{command_type}` command: `{cmd}`"),
-        )
-        .await;
-    *step += 1;
+    let is_final_execution = progress.current_step() + 1 == progress.total_steps();
+    let step_message = if is_final_execution {
+        format!("Executing final `{command_type}` command: `{cmd}`")
+    } else {
+        format!("Executing package's `{command_type}` command: `{cmd}`")
+    };
+
+    progress.next(sender, step_message).await;
 
     match command_runner
         .execute_with_timeout(cmd, config.command_timeout())
@@ -163,16 +149,46 @@ where
             }
 
             if output.is_success() {
+                if is_final_execution {
+                    sender
+                        .send_debug(format!(
+                            "Final command execution completed successfully (step {}/{})",
+                            progress.current_step(),
+                            progress.total_steps()
+                        ))
+                        .await;
+                }
                 Ok(true)
             } else {
+                sender
+                    .send_warning(format!(
+                        "Command failed at step {}/{}: exit code {}",
+                        progress.current_step(),
+                        progress.total_steps(),
+                        output.exit_code()
+                    ))
+                    .await;
                 Ok(false)
             }
         }
         Err(error) => {
             sender
-                .send_error(error, format!("Failed to execute {command_type} command"))
+                .send_error(
+                    error,
+                    format!(
+                        "Failed to execute {command_type} command at step {}/{}",
+                        progress.current_step(),
+                        progress.total_steps()
+                    ),
+                )
                 .await;
-            Err(format!("Command execution failed: {command_type}").into())
+            Err(format!(
+                "Command execution failed: {} (step {}/{})",
+                command_type,
+                progress.current_step(),
+                progress.total_steps()
+            )
+            .into())
         }
     }
 }

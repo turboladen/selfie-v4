@@ -22,21 +22,6 @@ pub(crate) struct EventSender {
 }
 
 impl EventSender {
-    pub(crate) fn new(
-        tx: mpsc::Sender<PackageEvent>,
-        operation_type: OperationType,
-        package_name: String,
-        environment: String,
-    ) -> Self {
-        Self::new_with_context(
-            tx,
-            operation_type,
-            package_name,
-            environment,
-            OperationContext::default(),
-        )
-    }
-
     pub(crate) fn new_with_context(
         tx: mpsc::Sender<PackageEvent>,
         operation_type: OperationType,

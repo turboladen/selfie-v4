@@ -18,6 +18,50 @@ use super::{
 
 use crate::{commands::runner::CommandRunner, config::AppConfig, package::port::PackageError};
 
+/// Helper for tracking progress through operation steps
+#[derive(Debug, Clone)]
+pub(crate) struct ProgressTracker {
+    current_step: u32,
+    total_steps: u32,
+}
+
+impl ProgressTracker {
+    pub(crate) fn new(total_steps: u32) -> Self {
+        Self {
+            current_step: 0,
+            total_steps,
+        }
+    }
+
+    pub(crate) async fn next(&mut self, sender: &EventSender, message: impl std::fmt::Display) {
+        self.current_step += 1;
+        let enhanced_message = format!("{} ({}/{})", message, self.current_step, self.total_steps);
+        sender
+            .send_progress(self.current_step, self.total_steps, enhanced_message)
+            .await;
+    }
+
+    /// Send progress with custom message that already includes step information
+    pub(crate) async fn send_custom(&self, sender: &EventSender, message: impl std::fmt::Display) {
+        sender
+            .send_progress(self.current_step, self.total_steps, message)
+            .await;
+    }
+
+    /// Check if this is the final step
+    pub(crate) fn is_final_step(&self) -> bool {
+        self.current_step >= self.total_steps
+    }
+
+    pub(crate) fn current_step(&self) -> u32 {
+        self.current_step
+    }
+
+    pub(crate) fn total_steps(&self) -> u32 {
+        self.total_steps
+    }
+}
+
 /// Primary port for package operations
 #[cfg_attr(test, mockall::automock)]
 #[async_trait::async_trait]
@@ -83,16 +127,55 @@ where
         }))
     }
 
-    // Helper to execute an operation with standard event handling
+    // Helper to execute an operation with standard event handling and dependency injection
+    fn execute_operation_with_deps<F, Fut>(
+        &self,
+        operation_type: OperationType,
+        package_name: &str,
+        context: OperationContext,
+        total_steps: u32,
+        handler: F,
+    ) -> EventStream
+    where
+        F: FnOnce(R, CR, AppConfig, EventSender, ProgressTracker) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = OperationResult> + Send,
+    {
+        let repo = self.package_repository.clone();
+        let command_runner = self.command_runner.clone();
+        let config = self.config.clone();
+        let package_name = package_name.to_string();
+
+        Self::create_event_stream(move |tx| async move {
+            let sender = EventSender::new_with_context(
+                tx.clone(),
+                operation_type,
+                package_name.clone(),
+                config.environment().to_string(),
+                context,
+            );
+
+            sender.send_started().await;
+            sender
+                .send_trace(format!("Current environment: {}", config.environment()))
+                .await;
+
+            let progress = ProgressTracker::new(total_steps);
+            let result = handler(repo, command_runner, config, sender.clone(), progress).await;
+            sender.send_completed(result).await;
+        })
+    }
+
+    // Helper to execute an operation with standard event handling (simpler version)
     fn execute_operation<F, Fut>(
         &self,
         operation_type: OperationType,
         package_name: &str,
         context: OperationContext,
+        total_steps: u32,
         handler: F,
     ) -> EventStream
     where
-        F: FnOnce(EventSender) -> Fut + Send + 'static,
+        F: FnOnce(EventSender, ProgressTracker) -> Fut + Send + 'static,
         Fut: std::future::Future<Output = OperationResult> + Send,
     {
         let config = self.config.clone();
@@ -112,7 +195,8 @@ where
                 .send_trace(format!("Current environment: {}", config.environment()))
                 .await;
 
-            let result = handler(sender.clone()).await;
+            let progress = ProgressTracker::new(total_steps);
+            let result = handler(sender.clone(), progress).await;
             sender.send_completed(result).await;
         })
     }
@@ -126,110 +210,76 @@ where
 {
     #[instrument]
     async fn check(&self, package_name: &str) -> EventStream {
-        // Clone what we need for the async task
-        let repo = self.package_repository.clone();
-        let command_runner = self.command_runner.clone();
-        let config = self.config.clone();
-        let package_name = package_name.to_string();
-
-        Self::create_event_stream(move |tx| async move {
-            let sender = EventSender::new(
-                tx,
-                OperationType::PackageCheck,
-                package_name.clone(),
-                config.environment().to_string(),
-            );
-
-            sender.send_started().await;
-            let current_env = config.environment();
-
-            sender
-                .send_trace(format!("Current environment: {}", current_env))
-                .await;
-
-            let result =
-                check::handle_check(&package_name, &repo, &config, &command_runner, &sender).await;
-
-            sender.send_completed(result).await
-        })
+        let package_name_owned = package_name.to_string();
+        self.execute_operation_with_deps(
+            OperationType::PackageCheck,
+            package_name,
+            OperationContext::default(),
+            3, // Load package + check environment + run check command
+            move |repo, command_runner, config, sender, mut progress| async move {
+                check::handle_check(
+                    &package_name_owned,
+                    &repo,
+                    &config,
+                    &command_runner,
+                    &sender,
+                    &mut progress,
+                )
+                .await
+            },
+        )
     }
 
-    // Implementation for the install method
     #[instrument]
     async fn install(&self, package_name: &str) -> EventStream {
-        // Clone what we need for the async task
-        let repo = self.package_repository.clone();
-        let command_runner = self.command_runner.clone();
-        let config = self.config.clone();
-        let package_name = package_name.to_string();
-
-        Self::create_event_stream(move |tx| async move {
-            let sender = EventSender::new(
-                tx,
-                OperationType::PackageInstall,
-                package_name.clone(),
-                config.environment().to_string(),
-            );
-
-            sender.send_started().await;
-            sender
-                .send_trace(format!("Current environment: {}", config.environment()))
-                .await;
-
-            let mut step = 1;
-            let total_steps = 12345; // Replace with actual calculation
-
-            let result = install::handle_install(
-                &package_name,
-                &repo,
-                &config,
-                &command_runner,
-                &sender,
-                &mut step,
-                total_steps,
-            )
-            .await;
-
-            sender.send_completed(result).await;
-        })
+        let package_name_owned = package_name.to_string();
+        self.execute_operation_with_deps(
+            OperationType::PackageInstall,
+            package_name,
+            OperationContext::default(),
+            5, // fetch_package + find_env + get_command + execute_command + result processing
+            move |repo, command_runner, config, sender, mut progress| async move {
+                install::handle_install(
+                    &package_name_owned,
+                    &repo,
+                    &config,
+                    &command_runner,
+                    &sender,
+                    &mut progress,
+                )
+                .await
+            },
+        )
     }
 
-    // Implement other methods similarly...
     async fn validate(
         &self,
         package_name: &str,
         package_path: Option<PathBuf>,
     ) -> Result<EventStream, PackageError> {
-        let repo = self.package_repository.clone();
-        let command_runner = self.command_runner.clone();
-        let config = self.config.clone();
-        let package_name = package_name.to_string();
+        let context = OperationContext {
+            package_path,
+            target_environment: None,
+        };
 
-        Ok(Self::create_event_stream(move |tx| async move {
-            let context = OperationContext {
-                package_path,
-                target_environment: None,
-            };
-            let sender = EventSender::new_with_context(
-                tx,
-                OperationType::PackageValidate,
-                package_name.clone(),
-                config.environment().to_string(),
-                context,
-            );
-            sender.send_started().await;
-            let current_env = config.environment();
-
-            sender
-                .send_trace(format!("Current environment: {}", current_env))
-                .await;
-
-            let result =
-                validate::handle_validate(&package_name, &repo, &config, &command_runner, &sender)
-                    .await;
-
-            sender.send_completed(result).await
-        }))
+        let package_name_owned = package_name.to_string();
+        Ok(self.execute_operation_with_deps(
+            OperationType::PackageValidate,
+            package_name,
+            context,
+            3, // load_package + validate_package + result processing
+            move |repo, command_runner, config, sender, mut progress| async move {
+                validate::handle_validate(
+                    &package_name_owned,
+                    &repo,
+                    &config,
+                    &command_runner,
+                    &sender,
+                    &mut progress,
+                )
+                .await
+            },
+        ))
     }
 
     async fn list(&self) -> Result<EventStream, PackageError> {
@@ -237,7 +287,8 @@ where
             OperationType::PackageList,
             "", // No specific package for list operation
             OperationContext::default(),
-            |_sender| async move {
+            1, // Just one step for listing
+            |_sender, mut _progress| async move {
                 // TODO: Implement actual listing logic
                 OperationResult::Success("List operation not yet implemented".to_string())
             },
@@ -249,7 +300,8 @@ where
             OperationType::PackageInfo,
             package_name,
             OperationContext::default(),
-            |_sender| async move {
+            1, // Just one step for info
+            |_sender, mut _progress| async move {
                 // TODO: Implement actual info logic
                 OperationResult::Success("Info operation not yet implemented".to_string())
             },
@@ -261,7 +313,8 @@ where
             OperationType::PackageCreate,
             package_name,
             OperationContext::default(),
-            |_sender| async move {
+            1, // Just one step for creation
+            |_sender, mut _progress| async move {
                 // TODO: Implement actual creation logic
                 OperationResult::Success("Create operation not yet implemented".to_string())
             },

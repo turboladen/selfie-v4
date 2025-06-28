@@ -19,15 +19,14 @@ pub(super) async fn handle_install<PR, CR>(
     config: &AppConfig,
     command_runner: &CR,
     sender: &EventSender,
-    step: &mut u32,
-    total_steps: u32,
+    progress: &mut crate::package::service::ProgressTracker,
 ) -> OperationResult
 where
     PR: PackageRepository,
     CR: CommandRunner,
 {
     // Step 1: Fetch package (reusing shared step)
-    let package = match steps::fetch_package(repo, package_name, sender, step, total_steps).await {
+    let package = match steps::fetch_package(repo, package_name, sender, progress).await {
         Ok(pkg) => pkg,
         Err(err) => {
             let error_msg = format!("Failed to fetch package '{}': {}", package_name, err);
@@ -40,8 +39,7 @@ where
         &package,
         config.environment(),
         sender,
-        step,
-        total_steps,
+        progress,
     )
     .await
     {
@@ -58,8 +56,7 @@ where
         "install",
         |ec| Some(ec.install()),
         sender,
-        step,
-        total_steps,
+        progress,
     )
     .await
     {
@@ -77,8 +74,7 @@ where
         "install",
         config,
         sender,
-        step,
-        total_steps,
+        progress,
     )
     .await
     {
@@ -91,10 +87,14 @@ where
 
     // Step 5: Process result
     if is_success {
-        sender
-            .send_progress(*step, total_steps, "Package installed successfully")
+        progress
+            .next(sender, "Package installed successfully")
             .await;
-        OperationResult::Success("Installation completed".to_string())
+        OperationResult::Success(format!(
+            "Installation completed successfully ({}/{} steps)",
+            progress.current_step(),
+            progress.total_steps()
+        ))
     } else {
         sender
             .send_warning(format!(
@@ -102,6 +102,10 @@ where
                 package_name
             ))
             .await;
-        OperationResult::Failure("Installation failed".to_string())
+        OperationResult::Failure(format!(
+            "Installation failed at step {}/{}",
+            progress.current_step(),
+            progress.total_steps()
+        ))
     }
 }

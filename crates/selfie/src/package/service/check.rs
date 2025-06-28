@@ -9,22 +9,19 @@ use crate::{
     },
 };
 
-pub(super) const TOTAL_STEPS: u32 = 3;
-
 pub(super) async fn handle_check<PR, CR>(
     package_name: &str,
     repo: &PR,
     config: &AppConfig,
     command_runner: &CR,
     sender: &EventSender,
+    progress: &mut crate::package::service::ProgressTracker,
 ) -> OperationResult
 where
     PR: PackageRepository + Clone,
     CR: CommandRunner + Clone,
 {
-    sender
-        .send_progress(1, TOTAL_STEPS, "Loading package definition")
-        .await;
+    progress.next(sender, "Loading package definition").await;
 
     // Step 1: Load package from repository
     let package = match repo.get_package(package_name) {
@@ -41,9 +38,7 @@ where
         }
     };
 
-    sender
-        .send_progress(2, TOTAL_STEPS, "Checking package environment")
-        .await;
+    progress.next(sender, "Checking package environment").await;
 
     // Step 2: Get environment-specific check command
     let current_env = config.environment();
@@ -79,22 +74,29 @@ where
         }
     };
 
-    sender
-        .send_progress(3, TOTAL_STEPS, "Running package check command")
-        .await;
+    progress.next(sender, "Running package check command").await;
 
     // Step 3: Execute the check command
     match command_runner.execute(check_command).await {
         Ok(output) => {
             if output.is_success() {
-                let success_msg =
-                    format!("Package '{}' check completed successfully", package_name);
+                let success_msg = format!(
+                    "Package '{}' check completed successfully ({}/{} steps)",
+                    package_name,
+                    progress.current_step(),
+                    progress.total_steps()
+                );
                 sender
                     .send_debug(format!("Check command output: {}", output.stdout_str()))
                     .await;
                 OperationResult::Success(success_msg)
             } else {
-                let error_msg = format!("Package '{}' check failed", package_name);
+                let error_msg = format!(
+                    "Package '{}' check failed at step {}/{}",
+                    package_name,
+                    progress.current_step(),
+                    progress.total_steps()
+                );
                 sender
                     .send_warning(format!("Check command stderr: {}", output.stderr_str()))
                     .await;
@@ -103,8 +105,11 @@ where
         }
         Err(err) => {
             let error_msg = format!(
-                "Failed to execute check command for package '{}': {}",
-                package_name, err
+                "Failed to execute check command for package '{}' at step {}/{}: {}",
+                package_name,
+                progress.current_step(),
+                progress.total_steps(),
+                err
             );
             sender.send_error(err, &error_msg).await;
             OperationResult::Failure(error_msg)
