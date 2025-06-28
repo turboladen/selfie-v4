@@ -388,5 +388,94 @@ mod tests {
             // Should find both files
             assert!(matches!(err, Err(ConfigLoadError::MultipleFound(_))));
         }
+
+        #[test]
+        fn test_config_load_invalid_yaml_error() {
+            let mut fs = MockFileSystem::default();
+            let config_dir = Path::new("/home/test/.config/selfie");
+            let config_path = config_dir.join("config.yaml");
+
+            fs.mock_config_dir_ok(&config_dir);
+            fs.mock_path_exists(&config_path, true);
+            fs.mock_path_exists(&config_dir.join("config.yml"), false);
+
+            // Mock invalid YAML content
+            let invalid_yaml = "invalid: yaml: content: [";
+            fs.mock_read_file(&config_path, invalid_yaml);
+
+            let loader = YamlLoader::new(&fs);
+            let result = loader.load_config();
+
+            assert!(result.is_err());
+            match result.unwrap_err() {
+                ConfigLoadError::ConfigError(_) => {
+                    // Expected config error for invalid YAML
+                }
+                _ => panic!("Expected ConfigError for invalid YAML"),
+            }
+        }
+
+        #[test]
+        fn test_config_load_filesystem_error() {
+            let mut fs = MockFileSystem::default();
+            let config_dir = Path::new("/home/test/.config/selfie");
+            let config_path = config_dir.join("config.yaml");
+
+            fs.mock_config_dir_ok(&config_dir);
+            fs.mock_path_exists(&config_path, true);
+            fs.mock_path_exists(&config_dir.join("config.yml"), false);
+
+            // Mock filesystem error when reading file
+            fs.expect_read_file()
+                .with(mockall::predicate::eq(config_path))
+                .returning(|_| {
+                    Err(FileSystemError::IoError(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "Permission denied",
+                    )))
+                });
+
+            let loader = YamlLoader::new(&fs);
+            let result = loader.load_config();
+
+            assert!(result.is_err());
+            match result.unwrap_err() {
+                ConfigLoadError::FileSystemError(FileSystemError::IoError(io_error)) => {
+                    assert_eq!(io_error.kind(), std::io::ErrorKind::PermissionDenied);
+                }
+                _ => panic!("Expected FileSystemError"),
+            }
+        }
+
+        #[test]
+        fn test_config_error_display_formatting() {
+            // Test NotFound error
+            let searched_path = PathBuf::from("/searched/paths");
+            let not_found_error = ConfigLoadError::NotFound {
+                searched: searched_path,
+            };
+            assert!(
+                not_found_error
+                    .to_string()
+                    .contains("No configuration file found")
+            );
+            assert!(not_found_error.to_string().contains("/searched/paths"));
+
+            // Test MultipleFound error
+            let multiple_error = ConfigLoadError::MultipleFound(vec![
+                "config1.yaml".to_string(),
+                "config2.yml".to_string(),
+            ]);
+            assert!(
+                multiple_error
+                    .to_string()
+                    .contains("Multiple configuration files found")
+            );
+            assert!(multiple_error.to_string().contains("config1.yaml"));
+        }
+
+        // Note: There's a potential bug in find_config_file_paths where it returns Ok(empty_vec)
+        // when config_dir() fails, leading to index out of bounds in load_config.
+        // This should be addressed in a future fix.
     }
 }

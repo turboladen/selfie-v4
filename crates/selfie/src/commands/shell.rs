@@ -241,4 +241,140 @@ mod tests {
             .await;
         assert!(matches!(result, Err(CommandError::Timeout(_))));
     }
+
+    // Error handling tests
+    #[tokio::test]
+    async fn test_command_timeout_error() {
+        let runner = ShellCommandRunner::new("/bin/sh", Duration::from_millis(50));
+
+        // Create a command that will timeout
+        let result = runner
+            .execute_with_timeout("sleep 1", Duration::from_millis(10))
+            .await;
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        match error {
+            CommandError::Timeout(_) => {
+                // Expected timeout error
+            }
+            _ => panic!("Expected CommandError::Timeout, got: {error:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_command_io_error() {
+        let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(5));
+
+        // Try to execute a command that doesn't exist
+        let result = runner.execute("nonexistent_command_12345_xyz").await;
+
+        // Command might succeed but with non-zero exit code, or fail
+        if let Ok(output) = result {
+            // If command executes, it should fail (non-zero exit code)
+            assert!(!output.is_success());
+        }
+        // If result is Err, that's also acceptable for this test
+    }
+
+    #[tokio::test]
+    async fn test_command_permission_denied() {
+        let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(5));
+
+        // Try to access a file that should not be accessible
+        let result = runner
+            .execute("cat /root/.ssh/id_rsa 2>/dev/null || echo 'permission denied'")
+            .await;
+
+        // This should either succeed with "permission denied" message or fail
+        // Either way, we're testing that the command runner handles the scenario
+        if let Ok(output) = result {
+            assert!(
+                output.stdout_str().contains("permission denied") || output.stderr_str().len() > 0
+            );
+        }
+        // If it fails, that's also acceptable for this test
+    }
+
+    #[tokio::test]
+    async fn test_command_invalid_syntax() {
+        let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(5));
+
+        // Try to execute a command with invalid syntax
+        let result = runner.execute("if [ 1 -eq 1 ; then echo 'unclosed'").await;
+
+        // This should fail due to invalid shell syntax
+        if let Ok(output) = result {
+            // Some shells might handle this gracefully
+            assert!(!output.is_success());
+        }
+        // If it errors, that's also expected
+    }
+
+    #[tokio::test]
+    async fn test_error_display_formatting() {
+        // Test that our error types format correctly
+        let timeout_error = CommandError::Timeout(Duration::from_millis(100));
+        assert_eq!(timeout_error.to_string(), "Command timed out after 100ms");
+
+        let io_error = std::io::Error::new(std::io::ErrorKind::Other, "test error");
+        let cmd_error = CommandError::IoError(Arc::new(io_error));
+        assert_eq!(cmd_error.to_string(), "IO Error: test error");
+
+        let stdout_error = CommandError::StdoutSpawn("stdout issue".to_string());
+        assert_eq!(
+            stdout_error.to_string(),
+            "Failed spawning stdout during command: stdout issue"
+        );
+
+        let stderr_error = CommandError::StderrSpawn("stderr issue".to_string());
+        assert_eq!(
+            stderr_error.to_string(),
+            "Failed spawning stderr during command: stderr issue"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_command_with_large_output() {
+        let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(5));
+
+        // Generate a large amount of output to test buffering
+        let result = runner
+            .execute("for i in $(seq 1 1000); do echo \"Line $i\"; done")
+            .await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.is_success());
+        assert!(output.stdout_str().lines().count() >= 1000);
+    }
+
+    #[tokio::test]
+    async fn test_command_output_methods() {
+        let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(5));
+
+        // Test that our output methods work correctly
+        let result = runner.execute("echo 'test output'").await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.is_success());
+        assert!(output.stdout_str().contains("test output"));
+
+        // Test that stderr_str() method exists and returns a string
+        let _stderr = output.stderr_str(); // Just verify the method works
+    }
+
+    #[tokio::test]
+    async fn test_command_exit_code_handling() {
+        let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(5));
+
+        // Command that exits with non-zero status
+        let result = runner.execute("exit 42").await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(!output.is_success());
+        assert_eq!(output.exit_code(), 42);
+    }
 }

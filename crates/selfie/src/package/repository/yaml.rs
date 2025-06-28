@@ -455,4 +455,153 @@ mod tests {
         assert!(packages.iter().any(|p| *p == "ripgrep"));
         assert!(packages.iter().any(|p| *p == "fzf"));
     }
+
+    #[test]
+    fn test_package_parse_error_handling() {
+        let mut fs = MockFileSystem::default();
+        let package_dir = PathBuf::from("/test/packages");
+        let package_path = package_dir.join("invalid.yaml");
+
+        fs.expect_path_exists()
+            .with(predicate::eq(package_dir.clone()))
+            .returning(|_| true);
+
+        fs.expect_path_exists()
+            .with(predicate::eq(package_path.clone()))
+            .returning(|_| true);
+
+        fs.expect_path_exists()
+            .with(predicate::eq(package_dir.join("invalid.yml")))
+            .returning(|_| false);
+
+        // Mock invalid YAML content
+        let invalid_yaml = "invalid: yaml: content: [";
+
+        fs.mock_list_directory(package_dir.clone(), &[package_path.clone()]);
+        fs.mock_read_file(package_path.clone(), invalid_yaml);
+
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
+        let result = repo.get_package("invalid");
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            PackageRepoError::PackageError(PackageError::ParseError {
+                name,
+                packages_path,
+                source,
+            }) => {
+                assert_eq!(name, "invalid");
+                assert_eq!(packages_path, package_dir);
+                match source {
+                    PackageParseError::YamlParse {
+                        package_path: error_path,
+                        ..
+                    } => {
+                        assert_eq!(error_path, package_path);
+                    }
+                    _ => panic!("Expected YamlParse error"),
+                }
+            }
+            _ => panic!("Expected ParseError"),
+        }
+    }
+
+    #[test]
+    fn test_directory_not_found_error() {
+        let mut fs = MockFileSystem::default();
+        let nonexistent_dir = PathBuf::from("/nonexistent");
+
+        fs.expect_path_exists()
+            .with(predicate::eq(nonexistent_dir.clone()))
+            .returning(|_| false);
+
+        let repo = YamlPackageRepository::new(fs, nonexistent_dir.clone());
+        let result = repo.list_packages();
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            PackageListError::PackageDirectoryNotFound(path) => {
+                assert_eq!(path, nonexistent_dir);
+            }
+            _ => panic!("Expected PackageDirectoryNotFound error"),
+        }
+    }
+
+    #[test]
+    fn test_multiple_packages_found_error() {
+        let mut fs = MockFileSystem::default();
+        let package_dir = PathBuf::from("/test/packages");
+
+        fs.expect_path_exists()
+            .with(predicate::eq(package_dir.clone()))
+            .returning(|_| true);
+
+        let file1 = package_dir.join("duplicate.yaml");
+        let file2 = package_dir.join("duplicate.yml");
+
+        fs.expect_path_exists()
+            .with(predicate::eq(file1.clone()))
+            .returning(|_| true);
+        fs.expect_path_exists()
+            .with(predicate::eq(file2.clone()))
+            .returning(|_| true);
+
+        // Create multiple files with the same package name
+        let package_yaml = r"
+            name: duplicate
+            version: 1.0.0
+            environments:
+              test-env:
+                install: echo test
+        ";
+
+        fs.mock_list_directory(package_dir.clone(), &[file1.clone(), file2.clone()]);
+        fs.mock_read_file(file1, package_yaml);
+        fs.mock_read_file(file2, package_yaml);
+
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
+        let result = repo.get_package("duplicate");
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            PackageRepoError::PackageError(PackageError::MultiplePackagesFound {
+                name,
+                packages_path,
+            }) => {
+                assert_eq!(name, "duplicate");
+                assert_eq!(packages_path, package_dir);
+            }
+            _ => panic!("Expected MultiplePackagesFound error"),
+        }
+    }
+
+    #[test]
+    fn test_error_display_formatting() {
+        let package_dir = PathBuf::from("/packages");
+
+        // Test PackageNotFound error
+        let not_found_error = PackageError::PackageNotFound {
+            name: "missing".to_string(),
+            packages_path: package_dir.clone(),
+        };
+        assert!(not_found_error.to_string().contains("missing"));
+        assert!(not_found_error.to_string().contains("/packages"));
+
+        // Test MultiplePackagesFound error
+        let multiple_error = PackageError::MultiplePackagesFound {
+            name: "duplicate".to_string(),
+            packages_path: package_dir.clone(),
+        };
+        assert!(multiple_error.to_string().contains("duplicate"));
+        assert!(
+            multiple_error
+                .to_string()
+                .contains("Multiple packages found")
+        );
+
+        // Test PackageDirectoryNotFound error
+        let dir_error = PackageListError::PackageDirectoryNotFound(package_dir.clone());
+        assert!(dir_error.to_string().contains("/packages"));
+        assert!(dir_error.to_string().contains("does not exist"));
+    }
 }
