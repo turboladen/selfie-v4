@@ -148,3 +148,92 @@ fn format_environments(
         .collect::<Vec<_>>()
         .join(", ")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use selfie::{config::AppConfigBuilder, package::event::PackageListItem};
+
+    fn create_test_config() -> selfie::config::AppConfig {
+        AppConfigBuilder::default()
+            .environment("test-env")
+            .package_directory("/tmp/test-packages")
+            .use_colors(false)
+            .build()
+    }
+
+    fn create_colored_config() -> selfie::config::AppConfig {
+        AppConfigBuilder::default()
+            .environment("test-env")
+            .package_directory("/tmp/test-packages")
+            .use_colors(true)
+            .build()
+    }
+
+    fn create_mock_reporter() -> TerminalProgressReporter {
+        TerminalProgressReporter::new(false)
+    }
+
+    #[test]
+    fn test_list_command_new() {
+        let config = create_test_config();
+        let reporter = create_mock_reporter();
+
+        let command = ListCommand::new(&config, reporter);
+        // Just test that construction doesn't panic
+        assert_eq!(command.config.environment(), "test-env");
+    }
+
+    #[test]
+    fn test_display_packages_table_empty() {
+        let config = create_test_config();
+        let packages = vec![];
+
+        // Should not panic with empty list
+        display_packages_table(&packages, &config);
+    }
+
+    #[test]
+    fn test_display_packages_table_single_package() {
+        let config = create_test_config();
+        let packages = vec![PackageListItem {
+            name: "test-package".to_string(),
+            version: "1.0.0".to_string(),
+            environments: vec!["test-env".to_string()],
+        }];
+
+        // Should not panic
+        display_packages_table(&packages, &config);
+    }
+
+    #[test]
+    fn test_display_packages_table_with_colors() {
+        let config = create_colored_config();
+        let packages = vec![PackageListItem {
+            name: "test-package".to_string(),
+            version: "1.0.0".to_string(),
+            environments: vec!["test-env".to_string()],
+        }];
+
+        // Should not panic with colors enabled
+        display_packages_table(&packages, &config);
+    }
+
+    #[test]
+    fn test_create_table() {
+        let table = create_table();
+        // Just test that table creation doesn't panic
+        let _table_str = table.to_string();
+    }
+
+    #[test]
+    fn test_format_environments() {
+        let config = create_test_config();
+        let environments = vec!["test-env".to_string(), "prod-env".to_string()];
+
+        let result = format_environments(&environments, "test-env", &config);
+
+        // Just test that it doesn't panic and returns something
+        assert!(!result.is_empty());
+    }
+}

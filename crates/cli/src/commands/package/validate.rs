@@ -190,3 +190,98 @@ fn create_validation_table() -> Table {
         .set_content_arrangement(ContentArrangement::Dynamic);
     table
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use selfie::{
+        config::AppConfigBuilder,
+        package::event::{
+            ValidationIssueData, ValidationLevel, ValidationResultData, ValidationStatus,
+        },
+    };
+
+    fn create_test_config() -> selfie::config::AppConfig {
+        AppConfigBuilder::default()
+            .environment("test-env")
+            .package_directory("/tmp/test-packages")
+            .use_colors(false)
+            .build()
+    }
+
+    fn create_colored_config() -> selfie::config::AppConfig {
+        AppConfigBuilder::default()
+            .environment("test-env")
+            .package_directory("/tmp/test-packages")
+            .use_colors(true)
+            .build()
+    }
+
+    fn create_test_validation_result(status: ValidationStatus) -> ValidationResultData {
+        ValidationResultData {
+            package_name: "test-package".to_string(),
+            environment: "test-env".to_string(),
+            status,
+            issues: vec![],
+        }
+    }
+
+    #[test]
+    fn test_display_validation_result_valid() {
+        let config = create_test_config();
+        let validation_result = create_test_validation_result(ValidationStatus::Valid);
+
+        // Should not panic
+        display_validation_result(&validation_result, &config);
+    }
+
+    #[test]
+    fn test_display_validation_success_card() {
+        let config = create_test_config();
+        let validation_result = create_test_validation_result(ValidationStatus::Valid);
+
+        // Should not panic
+        display_validation_success_card(&validation_result, &config);
+    }
+
+    #[test]
+    fn test_display_validation_success_card_with_colors() {
+        let config = create_colored_config();
+        let validation_result = create_test_validation_result(ValidationStatus::Valid);
+
+        // Should not panic with colors enabled
+        display_validation_success_card(&validation_result, &config);
+    }
+
+    #[test]
+    fn test_display_validation_issues_table_empty() {
+        let config = create_test_config();
+        let validation_result = create_test_validation_result(ValidationStatus::Valid);
+
+        // Should not display anything for empty issues
+        display_validation_issues_table(&validation_result, &config);
+    }
+
+    #[test]
+    fn test_display_validation_issues_table_with_issues() {
+        let config = create_test_config();
+        let mut validation_result = create_test_validation_result(ValidationStatus::HasErrors);
+        validation_result.issues = vec![ValidationIssueData {
+            level: ValidationLevel::Error,
+            category: "package".to_string(),
+            field: "name".to_string(),
+            message: "Package name is required".to_string(),
+            suggestion: Some("Add a name field".to_string()),
+        }];
+
+        // Should not panic
+        display_validation_issues_table(&validation_result, &config);
+    }
+
+    #[test]
+    fn test_create_validation_table() {
+        let table = create_validation_table();
+        // Just test that table creation doesn't panic
+        let _table_str = table.to_string();
+    }
+}

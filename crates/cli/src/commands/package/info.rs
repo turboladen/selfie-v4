@@ -242,3 +242,111 @@ fn format_status(status: &EnvironmentStatus, use_colors: bool) -> String {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use selfie::{
+        config::AppConfigBuilder,
+        package::event::{EnvironmentStatus, EnvironmentStatusData, PackageInfoData},
+    };
+
+    fn create_test_config() -> selfie::config::AppConfig {
+        AppConfigBuilder::default()
+            .environment("test-env")
+            .package_directory("/tmp/test-packages")
+            .use_colors(false)
+            .build()
+    }
+
+    fn create_colored_config() -> selfie::config::AppConfig {
+        AppConfigBuilder::default()
+            .environment("test-env")
+            .package_directory("/tmp/test-packages")
+            .use_colors(true)
+            .build()
+    }
+
+    fn create_test_package_info() -> PackageInfoData {
+        PackageInfoData {
+            name: "test-package".to_string(),
+            version: "1.0.0".to_string(),
+            description: Some("A test package".to_string()),
+            homepage: Some("https://example.com".to_string()),
+            environments: vec!["test-env".to_string(), "prod-env".to_string()],
+            current_environment: "test-env".to_string(),
+        }
+    }
+
+    fn create_test_environment_status(is_current: bool) -> EnvironmentStatusData {
+        EnvironmentStatusData {
+            environment_name: if is_current { "test-env" } else { "prod-env" }.to_string(),
+            is_current,
+            install_command: "apt install test-package".to_string(),
+            check_command: Some("which test-package".to_string()),
+            dependencies: vec!["dependency1".to_string(), "dependency2".to_string()],
+            status: if is_current {
+                Some(EnvironmentStatus::Installed)
+            } else {
+                None
+            },
+        }
+    }
+
+    #[test]
+    fn test_create_package_info_table() {
+        let config = create_test_config();
+        let package_info = create_test_package_info();
+
+        let table = create_package_info_table(&package_info, &config);
+        // Just test that the function doesn't panic
+        let _table_str = table.to_string();
+    }
+
+    #[test]
+    fn test_create_package_info_table_with_colors() {
+        let config = create_colored_config();
+        let package_info = create_test_package_info();
+
+        let table = create_package_info_table(&package_info, &config);
+        // Just test that it doesn't panic with colors enabled
+        let _table_str = table.to_string();
+    }
+
+    #[test]
+    fn test_create_environment_table() {
+        let config = create_test_config();
+        let env_status = create_test_environment_status(true);
+
+        let table = create_environment_table(&env_status, &config);
+        // Just test that the function doesn't panic
+        let _table_str = table.to_string();
+    }
+
+    #[test]
+    fn test_format_status_functions() {
+        let status = EnvironmentStatus::Installed;
+        let result = format_status(&status, false);
+        assert!(result.contains("Installed"));
+
+        let status = EnvironmentStatus::NotInstalled;
+        let result = format_status(&status, false);
+        assert!(result.contains("Not installed"));
+    }
+
+    #[test]
+    fn test_format_environment_names() {
+        let config = create_test_config();
+        let environments = vec!["test-env".to_string(), "prod-env".to_string()];
+        let result = format_environment_names(&environments, "test-env", &config);
+        // Just test that it doesn't panic
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_create_table() {
+        let table = create_table();
+        // Just test that table creation doesn't panic
+        let _table_str = table.to_string();
+    }
+}

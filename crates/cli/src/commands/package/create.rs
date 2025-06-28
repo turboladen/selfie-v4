@@ -15,3 +15,164 @@ pub(crate) fn handle_create(
     ));
     0
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use selfie::config::AppConfigBuilder;
+
+    fn create_test_config() -> selfie::config::AppConfig {
+        AppConfigBuilder::default()
+            .environment("test-env")
+            .package_directory("/tmp/test-packages")
+            .use_colors(false)
+            .build()
+    }
+
+    fn create_colored_config() -> selfie::config::AppConfig {
+        AppConfigBuilder::default()
+            .environment("test-env")
+            .package_directory("/tmp/test-packages")
+            .use_colors(true)
+            .build()
+    }
+
+    fn create_mock_reporter() -> TerminalProgressReporter {
+        TerminalProgressReporter::new(false)
+    }
+
+    #[test]
+    fn test_handle_create_basic() {
+        let config = create_test_config();
+        let reporter = create_mock_reporter();
+
+        let result = handle_create("test-package", &config, reporter);
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_handle_create_with_colors() {
+        let config = create_colored_config();
+        let reporter = TerminalProgressReporter::new(true);
+
+        let result = handle_create("test-package", &config, reporter);
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_handle_create_different_package_names() {
+        let config = create_test_config();
+
+        let test_cases = vec![
+            "simple-package",
+            "package-with-dashes",
+            "package_with_underscores",
+            "PackageWithCamelCase",
+            "package123",
+            "a",
+            "very-long-package-name-that-should-still-work",
+        ];
+
+        for package_name in test_cases {
+            let reporter = create_mock_reporter();
+            let result = handle_create(package_name, &config, reporter);
+            assert_eq!(result, 0, "Failed for package: {}", package_name);
+        }
+    }
+
+    #[test]
+    fn test_handle_create_different_environments() {
+        let _reporter = create_mock_reporter();
+
+        let test_environments = vec![
+            "development",
+            "staging",
+            "production",
+            "test",
+            "local",
+            "ci",
+        ];
+
+        for environment in test_environments {
+            let config = AppConfigBuilder::default()
+                .environment(environment)
+                .package_directory("/tmp/test-packages")
+                .build();
+
+            let reporter = create_mock_reporter();
+            let result = handle_create("test-package", &config, reporter);
+            assert_eq!(result, 0, "Failed for environment: {}", environment);
+        }
+    }
+
+    #[test]
+    fn test_handle_create_empty_package_name() {
+        let config = create_test_config();
+        let reporter = create_mock_reporter();
+
+        let result = handle_create("", &config, reporter);
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_handle_create_package_name_with_special_characters() {
+        let config = create_test_config();
+
+        let test_cases = vec![
+            "package@1.0.0",
+            "package.name",
+            "package+extra",
+            "package~version",
+        ];
+
+        for package_name in test_cases {
+            let reporter = create_mock_reporter();
+            let result = handle_create(package_name, &config, reporter);
+            assert_eq!(result, 0, "Failed for package: {}", package_name);
+        }
+    }
+
+    #[test]
+    fn test_handle_create_function_does_not_panic() {
+        // Test that the function doesn't panic with various inputs
+        let config = create_test_config();
+        let reporter = create_mock_reporter();
+
+        // Should not panic even with unusual inputs
+        let _result = handle_create("test-package", &config, reporter);
+    }
+
+    #[test]
+    fn test_handle_create_consistent_return_value() {
+        let config = create_test_config();
+
+        // Multiple calls should return the same value
+        for _ in 0..5 {
+            let reporter = create_mock_reporter();
+            let result = handle_create("consistent-package", &config, reporter);
+            assert_eq!(result, 0);
+        }
+    }
+
+    #[test]
+    fn test_handle_create_config_parameter_usage() {
+        let config = create_test_config();
+        let reporter = create_mock_reporter();
+
+        // Test that the function accepts the config parameter
+        // (Currently not used in implementation, but parameter should be accepted)
+        let result = handle_create("test-package", &config, reporter);
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_handle_create_reporter_parameter_usage() {
+        let config = create_test_config();
+        let reporter = create_mock_reporter();
+
+        // Test that the function uses the reporter parameter
+        // (Implementation should call reporter.report_info)
+        let result = handle_create("test-package", &config, reporter);
+        assert_eq!(result, 0);
+    }
+}

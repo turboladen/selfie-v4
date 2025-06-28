@@ -158,3 +158,114 @@ fn display_check_result_card(check_result: &CheckResultData, config: &AppConfig)
 
     println!("{}", status_line);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use selfie::config::AppConfigBuilder;
+    use selfie::package::event::{CheckResult, CheckResultData};
+
+    fn create_test_config() -> selfie::config::AppConfig {
+        AppConfigBuilder::default()
+            .environment("test-env")
+            .package_directory("/tmp/test-packages")
+            .use_colors(false)
+            .build()
+    }
+
+    fn create_colored_config() -> selfie::config::AppConfig {
+        AppConfigBuilder::default()
+            .environment("test-env")
+            .package_directory("/tmp/test-packages")
+            .use_colors(true)
+            .build()
+    }
+
+    #[test]
+    fn test_display_check_result_card_success() {
+        let config = create_test_config();
+        let check_result = CheckResultData {
+            package_name: "test-package".to_string(),
+            environment: "test-env".to_string(),
+            check_command: Some("which test-command".to_string()),
+            result: CheckResult::Success,
+        };
+
+        // Just test that the function doesn't panic
+        display_check_result_card(&check_result, &config);
+    }
+
+    #[test]
+    fn test_display_check_result_card_failed() {
+        let config = create_test_config();
+        let check_result = CheckResultData {
+            package_name: "test-package".to_string(),
+            environment: "test-env".to_string(),
+            check_command: Some("which missing-command".to_string()),
+            result: CheckResult::Failed {
+                stdout: "".to_string(),
+                stderr: "command not found".to_string(),
+                exit_code: Some(1),
+            },
+        };
+
+        // Just test that the function doesn't panic
+        display_check_result_card(&check_result, &config);
+    }
+
+    #[test]
+    fn test_display_check_result_card_no_command() {
+        let config = create_test_config();
+        let check_result = CheckResultData {
+            package_name: "test-package".to_string(),
+            environment: "test-env".to_string(),
+            check_command: None,
+            result: CheckResult::NoCheckCommand,
+        };
+
+        // Just test that the function doesn't panic
+        display_check_result_card(&check_result, &config);
+    }
+
+    #[test]
+    fn test_display_check_result_card_with_colors() {
+        let config = create_colored_config();
+        let check_result = CheckResultData {
+            package_name: "test-package".to_string(),
+            environment: "test-env".to_string(),
+            check_command: Some("which test-command".to_string()),
+            result: CheckResult::Success,
+        };
+
+        // Just test that the function doesn't panic with colors enabled
+        display_check_result_card(&check_result, &config);
+    }
+
+    #[test]
+    fn test_display_check_result_card_error() {
+        let config = create_test_config();
+        let check_result = CheckResultData {
+            package_name: "test-package".to_string(),
+            environment: "test-env".to_string(),
+            check_command: Some("some-command".to_string()),
+            result: CheckResult::Error("Network timeout".to_string()),
+        };
+
+        // Just test that the function doesn't panic
+        display_check_result_card(&check_result, &config);
+    }
+
+    #[test]
+    fn test_display_check_result_card_command_not_found() {
+        let config = create_test_config();
+        let check_result = CheckResultData {
+            package_name: "test-package".to_string(),
+            environment: "test-env".to_string(),
+            check_command: Some("missing-cmd".to_string()),
+            result: CheckResult::CommandNotFound,
+        };
+
+        // Just test that the function doesn't panic
+        display_check_result_card(&check_result, &config);
+    }
+}
