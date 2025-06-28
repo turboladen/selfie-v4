@@ -183,7 +183,7 @@ async fn handle_chunked_read_result(
             tx.send(output_type(chunk))
                 .await
                 .map_err(|e| CommandError::Callback(e.0))?;
-            buffer.clear();
+            // Note: Don't clear the buffer here - tokio reuses it for the next read
         }
         Err(e) => return Err(CommandError::IoError(Arc::new(e))),
     }
