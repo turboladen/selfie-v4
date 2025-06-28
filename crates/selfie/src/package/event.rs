@@ -260,6 +260,16 @@ impl EventSender {
         .await;
     }
 
+    /// Send check result data
+    pub(crate) async fn send_check_result(&self, check_result: CheckResultData) {
+        let operation_info = self.touch_operation_info();
+        self.send(PackageEvent::CheckResultCompleted {
+            operation_info,
+            check_result,
+        })
+        .await;
+    }
+
     fn touch_operation_info(&self) -> OperationInfo {
         let mut info = self.operation_info.clone();
         info.timestamp = Instant::now();
@@ -396,6 +406,12 @@ pub enum PackageEvent {
         operation_info: OperationInfo,
         package_list: PackageListData,
     },
+
+    /// Check result completed
+    CheckResultCompleted {
+        operation_info: OperationInfo,
+        check_result: CheckResultData,
+    },
 }
 
 /// Structured data for package information
@@ -450,6 +466,29 @@ pub struct PackageListItem {
 pub struct InvalidPackageInfo {
     pub path: String,
     pub error: String,
+}
+
+/// Structured data for check results
+#[derive(Debug, Clone)]
+pub struct CheckResultData {
+    pub package_name: String,
+    pub environment: String,
+    pub check_command: Option<String>,
+    pub result: CheckResult,
+}
+
+/// Result of a check operation
+#[derive(Debug, Clone)]
+pub enum CheckResult {
+    Success,
+    Failed {
+        stdout: String,
+        stderr: String,
+        exit_code: Option<i32>,
+    },
+    CommandNotFound,
+    NoCheckCommand,
+    Error(String),
 }
 
 /// Log levels for the EventSender log method

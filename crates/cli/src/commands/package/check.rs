@@ -3,6 +3,7 @@ use selfie::{
     config::AppConfig,
     fs::real::RealFileSystem,
     package::{
+        event::{CheckResult, CheckResultData, PackageEvent},
         repository::YamlPackageRepository,
         service::{PackageService, PackageServiceImpl},
     },
@@ -29,33 +30,154 @@ pub(crate) async fn handle_check(
     // Call the service's check method to get an event stream
     let event_stream = service.check(package_name).await;
 
-    // Process the event stream using the reusable event processor with custom handling
+    // Process the event stream with custom handling for structured data
     let processor = EventProcessor::new(reporter);
-
-    // Example of custom event handling for Progress events
     processor
-        .process_events_with_handler(event_stream, |event, reporter| {
-            match event {
-                // Custom handling for progress events - show percentage
-                selfie::package::event::PackageEvent::Progress {
-                    percent_complete,
-                    step,
-                    total_steps,
-                    message,
-                    ..
-                } => {
-                    reporter.report_progress(format!(
-                        "[{:.0}%] Step {}/{}: {}",
-                        percent_complete * 100.0,
-                        step,
-                        total_steps,
-                        message
-                    ));
-                    Some(true) // Continue processing
-                }
-                // Let default handler handle all other events
-                _ => None,
-            }
+        .process_events_with_handler(event_stream, |event, _reporter| {
+            handle_check_event(event, config)
         })
         .await
+}
+
+fn handle_check_event(event: &PackageEvent, config: &AppConfig) -> Option<bool> {
+    match event {
+        PackageEvent::CheckResultCompleted { check_result, .. } => {
+            display_check_result_card(check_result, config);
+            Some(true) // Continue processing
+        }
+        PackageEvent::Progress {
+            percent_complete,
+            step,
+            total_steps,
+            message,
+            ..
+        } => {
+            // Custom progress format for check command
+            println!(
+                "• [{:.0}%] Step {}/{}: {}",
+                percent_complete * 100.0,
+                step,
+                total_steps,
+                message
+            );
+            Some(true) // Continue processing
+        }
+        _ => None, // Use default handling for other events
+    }
+}
+
+fn display_check_result_card(check_result: &CheckResultData, config: &AppConfig) {
+    println!();
+    println!("📋 Check Results:");
+
+    // Use colors if enabled
+    let format_field = |field: &str| -> String {
+        if config.use_colors() {
+            format!("   {}: ", console::style(field).cyan().bold())
+        } else {
+            format!("   {}: ", field)
+        }
+    };
+
+    println!("{}{}", format_field("Package"), check_result.package_name);
+    println!(
+        "{}{}",
+        format_field("Environment"),
+        check_result.environment
+    );
+
+    if let Some(cmd) = &check_result.check_command {
+        println!("{}{}", format_field("Command"), cmd);
+    }
+
+    // Format status with appropriate icon and color
+    let status_line = match &check_result.result {
+        CheckResult::Success => {
+            if config.use_colors() {
+                format!(
+                    "   {}: {}",
+                    console::style("Status").cyan().bold(),
+                    console::style("✅ Installed").green().bold()
+                )
+            } else {
+                "   Status: ✅ Installed".to_string()
+            }
+        }
+        CheckResult::Failed {
+            stderr, exit_code, ..
+        } => {
+            let status = if config.use_colors() {
+                format!(
+                    "   {}: {}",
+                    console::style("Status").cyan().bold(),
+                    console::style("❌ Not installed").red().bold()
+                )
+            } else {
+                "   Status: ❌ Not installed".to_string()
+            };
+
+            if !stderr.is_empty() {
+                format!(
+                    "{}\n   {}: {}",
+                    status,
+                    if config.use_colors() {
+                        console::style("Details").cyan().bold().to_string()
+                    } else {
+                        "Details".to_string()
+                    },
+                    stderr.trim()
+                )
+            } else if let Some(code) = exit_code {
+                format!(
+                    "{}\n   {}: Exit code {}",
+                    status,
+                    if config.use_colors() {
+                        console::style("Details").cyan().bold().to_string()
+                    } else {
+                        "Details".to_string()
+                    },
+                    code
+                )
+            } else {
+                status
+            }
+        }
+        CheckResult::NoCheckCommand => {
+            if config.use_colors() {
+                format!(
+                    "   {}: {}",
+                    console::style("Status").cyan().bold(),
+                    console::style("⚠️ No check command defined").yellow()
+                )
+            } else {
+                "   Status: ⚠️ No check command defined".to_string()
+            }
+        }
+        CheckResult::CommandNotFound => {
+            if config.use_colors() {
+                format!(
+                    "   {}: {}",
+                    console::style("Status").cyan().bold(),
+                    console::style("❌ Command not found").red().bold()
+                )
+            } else {
+                "   Status: ❌ Command not found".to_string()
+            }
+        }
+        CheckResult::Error(error) => {
+            if config.use_colors() {
+                format!(
+                    "   {}: {}\n   {}: {}",
+                    console::style("Status").cyan().bold(),
+                    console::style("❌ Error").red().bold(),
+                    console::style("Details").cyan().bold(),
+                    error
+                )
+            } else {
+                format!("   Status: ❌ Error\n   Details: {}", error)
+            }
+        }
+    };
+
+    println!("{}", status_line);
 }

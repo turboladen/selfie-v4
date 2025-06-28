@@ -4,7 +4,7 @@ use crate::{
     commands::runner::CommandRunner,
     config::AppConfig,
     package::{
-        event::{EventSender, OperationResult},
+        event::{CheckResult, CheckResultData, EventSender, OperationResult},
         port::PackageRepository,
     },
 };
@@ -54,65 +54,104 @@ where
         }
     };
 
-    let check_command = match &env_config.check {
-        Some(cmd) => {
-            sender
-                .send_debug(format!(
-                    "Found check command for environment '{}': {}",
-                    current_env, cmd
-                ))
-                .await;
-            cmd
-        }
-        None => {
-            let error_msg = format!(
-                "No check command defined for package '{}' in environment '{}'",
-                package_name, current_env
-            );
-            sender.send_warning(&error_msg).await;
-            return OperationResult::Failure(error_msg);
-        }
-    };
+    let check_command = env_config.check.as_ref();
+
+    if check_command.is_none() {
+        // Send structured result for no check command
+        let check_result = CheckResultData {
+            package_name: package_name.to_string(),
+            environment: current_env.to_string(),
+            check_command: None,
+            result: CheckResult::NoCheckCommand,
+        };
+        sender.send_check_result(check_result).await;
+
+        let error_msg = format!(
+            "No check command defined for package '{}' in environment '{}'",
+            package_name, current_env
+        );
+        return OperationResult::Failure(error_msg);
+    }
+
+    let check_command = check_command.unwrap();
+    sender
+        .send_debug(format!(
+            "Found check command for environment '{}': {}",
+            current_env, check_command
+        ))
+        .await;
 
     progress.next(sender, "Running package check command").await;
 
     // Step 3: Execute the check command
-    match command_runner.execute(check_command).await {
+    let check_result = match command_runner.execute(check_command).await {
         Ok(output) => {
             if output.is_success() {
-                let success_msg = format!(
-                    "Package '{}' check completed successfully ({}/{} steps)",
-                    package_name,
-                    progress.current_step(),
-                    progress.total_steps()
-                );
                 sender
                     .send_debug(format!("Check command output: {}", output.stdout_str()))
                     .await;
-                OperationResult::Success(success_msg)
+                CheckResultData {
+                    package_name: package_name.to_string(),
+                    environment: current_env.to_string(),
+                    check_command: Some(check_command.to_string()),
+                    result: CheckResult::Success,
+                }
             } else {
-                let error_msg = format!(
-                    "Package '{}' check failed at step {}/{}",
-                    package_name,
-                    progress.current_step(),
-                    progress.total_steps()
-                );
-                sender
-                    .send_warning(format!("Check command stderr: {}", output.stderr_str()))
-                    .await;
-                OperationResult::Failure(error_msg)
+                CheckResultData {
+                    package_name: package_name.to_string(),
+                    environment: current_env.to_string(),
+                    check_command: Some(check_command.to_string()),
+                    result: CheckResult::Failed {
+                        stdout: output.stdout_str().to_string(),
+                        stderr: output.stderr_str().to_string(),
+                        exit_code: Some(output.exit_code()),
+                    },
+                }
             }
         }
-        Err(err) => {
-            let error_msg = format!(
-                "Failed to execute check command for package '{}' at step {}/{}: {}",
+        Err(err) => CheckResultData {
+            package_name: package_name.to_string(),
+            environment: current_env.to_string(),
+            check_command: Some(check_command.to_string()),
+            result: CheckResult::Error(err.to_string()),
+        },
+    };
+
+    // Send structured check result
+    sender.send_check_result(check_result.clone()).await;
+
+    // Return appropriate operation result
+    match &check_result.result {
+        CheckResult::Success => {
+            let success_msg = format!(
+                "Package '{}' check completed successfully ({}/{} steps)",
                 package_name,
                 progress.current_step(),
-                progress.total_steps(),
-                err
+                progress.total_steps()
             );
-            sender.send_error(err, &error_msg).await;
+            OperationResult::Success(success_msg)
+        }
+        CheckResult::Failed { .. } => {
+            let error_msg = format!(
+                "Package '{}' check failed at step {}/{}",
+                package_name,
+                progress.current_step(),
+                progress.total_steps()
+            );
             OperationResult::Failure(error_msg)
+        }
+        CheckResult::Error(_) => {
+            let error_msg = format!(
+                "Failed to execute check command for package '{}' at step {}/{}",
+                package_name,
+                progress.current_step(),
+                progress.total_steps()
+            );
+            OperationResult::Failure(error_msg)
+        }
+        _ => {
+            // This case is already handled above, but included for completeness
+            OperationResult::Failure("Unexpected check result".to_string())
         }
     }
 }
