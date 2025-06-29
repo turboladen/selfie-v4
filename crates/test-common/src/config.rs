@@ -1,6 +1,6 @@
 //! AppConfig test helpers to eliminate duplication across CLI command tests.
 
-use crate::constants::{TEST_ENV, TEST_PACKAGE_DIR};
+use crate::constants::{SERVICE_TEST_ENV, TEST_ENV, TEST_PACKAGE_DIR};
 use selfie::config::{AppConfig, AppConfigBuilder};
 use std::path::Path;
 
@@ -63,6 +63,16 @@ pub fn test_config_with_dir_and_env<P: AsRef<Path>>(
 ) -> AppConfig {
     AppConfigBuilder::default()
         .environment(environment)
+        .package_directory(package_dir.as_ref())
+        .use_colors(false)
+        .build()
+}
+
+/// Creates a test configuration for service layer tests with the correct "test" environment.
+/// Used primarily in service integration tests with temporary directories.
+pub fn service_test_config_with_dir<P: AsRef<Path>>(package_dir: P) -> AppConfig {
+    AppConfigBuilder::default()
+        .environment(SERVICE_TEST_ENV)
         .package_directory(package_dir.as_ref())
         .use_colors(false)
         .build()

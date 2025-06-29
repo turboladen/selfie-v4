@@ -6,6 +6,9 @@ pub const TEST_ENV: &str = "test-env";
 /// Alternative test environment name for multi-environment tests
 pub const ALT_TEST_ENV: &str = "prod-env";
 
+/// Service test environment name (used in service layer integration tests)
+pub const SERVICE_TEST_ENV: &str = "test";
+
 /// Default test package directory path
 pub const TEST_PACKAGE_DIR: &str = "/tmp/test-packages";
 

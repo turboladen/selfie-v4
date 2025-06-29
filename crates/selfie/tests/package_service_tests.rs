@@ -12,109 +12,43 @@
 //! These tests complement the unit tests by testing the full service layer
 //! integration with real file system and command runner implementations.
 
-use std::{path::PathBuf, time::Duration};
-
 use tempfile::TempDir;
-
-use selfie::{
-    commands::ShellCommandRunner,
-    config::AppConfigBuilder,
-    fs::real::RealFileSystem,
-    package::{
-        event::{OperationResult, PackageEvent},
-        repository::YamlPackageRepository,
-        service::{PackageService, PackageServiceImpl},
-    },
+use test_common::{
+    assert_failed_operation, assert_successful_operation, collect_events,
+    create_service_invalid_package_file, create_service_test_package_file,
+    create_service_test_service, get_operation_result,
 };
 
-fn create_test_package_file(dir: &TempDir, name: &str, has_check: bool) -> PathBuf {
-    let check_command = if has_check {
-        format!("\n    check: \"echo 'installed'\"")
-    } else {
-        String::new()
-    };
+use selfie::package::{
+    event::{OperationResult, PackageEvent},
+    service::PackageService,
+};
 
-    let content = format!(
-        r#"name: "{}"
-version: "1.0.0"
-description: "Test package for service layer testing"
-homepage: "https://example.com/{}"
-
-environments:
-  test:
-    install: "echo 'installing {}'"{}
-    dependencies: []
-"#,
-        name, name, name, check_command
-    );
-
-    let file_path = dir.path().join(format!("{}.yml", name));
-    std::fs::write(&file_path, content).unwrap();
-    file_path
+fn create_test_package_file(dir: &TempDir, name: &str, has_check: bool) -> std::path::PathBuf {
+    create_service_test_package_file(dir, name, has_check)
 }
 
-fn create_invalid_package_file(dir: &TempDir, name: &str) -> PathBuf {
-    let content = r#"# Invalid YAML - syntax error
-name: "invalid-package"
-version: "1.0.0"
-environments:
-  test:
-    install: "echo 'test'
-    # Missing closing quote above - this will cause YAML parse error
-"#;
-
-    let file_path = dir.path().join(format!("{}.yml", name));
-    std::fs::write(&file_path, content).unwrap();
-    file_path
+fn create_invalid_package_file(dir: &TempDir, name: &str) -> std::path::PathBuf {
+    create_service_invalid_package_file(dir, name)
 }
 
-/// Helper function to collect all events from a stream
-/// This is used to capture events for testing verification
-async fn collect_events(mut stream: selfie::package::event::EventStream) -> Vec<PackageEvent> {
-    let mut events = Vec::new();
-    while let Some(event) = futures::StreamExt::next(&mut stream).await {
-        events.push(event);
-    }
-    events
-}
-
-/// Helper function to extract the operation result from events
-/// Returns the final result of the operation if found
-async fn get_operation_result(events: &[PackageEvent]) -> Option<OperationResult> {
-    for event in events {
-        if let PackageEvent::Completed { result, .. } = event {
-            return Some(result.clone());
-        }
-    }
-    None
-}
+// Event processing helpers are now provided by test_common crate
 
 #[tokio::test]
 async fn test_service_check_success() {
     // Arrange
     let temp_dir = TempDir::new().unwrap();
     create_test_package_file(&temp_dir, "test-package", true);
-
-    let config = AppConfigBuilder::default()
-        .environment("test")
-        .package_directory(temp_dir.path())
-        .build();
-
-    let fs = RealFileSystem;
-    let repo = YamlPackageRepository::new(fs, config.package_directory().clone());
-    let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(30));
-    let service = PackageServiceImpl::new(repo, runner, config);
+    let service = create_service_test_service(&temp_dir);
 
     // Act
     let stream = service.check("test-package").await;
     let events = collect_events(stream).await;
 
     // Assert
-    let result = get_operation_result(&events).await;
-    assert!(result.is_some());
-    assert!(matches!(result.unwrap(), OperationResult::Success(_)));
+    assert_successful_operation(&events);
 
-    // Verify we have progress events
+    // Verify we have the expected number of progress events for check operation
     let progress_events: Vec<_> = events
         .iter()
         .filter(|e| matches!(e, PackageEvent::Progress { .. }))
@@ -124,51 +58,21 @@ async fn test_service_check_success() {
         3,
         "Should have 3 progress events for check operation"
     );
-
-    // Verify we have a started event
-    let started_events: Vec<_> = events
-        .iter()
-        .filter(|e| matches!(e, PackageEvent::Started { .. }))
-        .collect();
-    assert_eq!(
-        started_events.len(),
-        1,
-        "Should have exactly one started event"
-    );
 }
 
 #[tokio::test]
 async fn test_service_check_package_not_found() {
     // Arrange
     let temp_dir = TempDir::new().unwrap();
-    let config = AppConfigBuilder::default()
-        .environment("test")
-        .package_directory(temp_dir.path())
-        .build();
-
-    let fs = RealFileSystem;
-    let repo = YamlPackageRepository::new(fs, config.package_directory().clone());
-    let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(30));
-    let service = PackageServiceImpl::new(repo, runner, config);
+    // Don't create any package files
+    let service = create_service_test_service(&temp_dir);
 
     // Act
     let stream = service.check("non-existent-package").await;
     let events = collect_events(stream).await;
 
     // Assert
-    let result = get_operation_result(&events).await;
-    assert!(result.is_some());
-    assert!(matches!(result.unwrap(), OperationResult::Failure(_)));
-
-    // Should have error events
-    let error_events: Vec<_> = events
-        .iter()
-        .filter(|e| matches!(e, PackageEvent::Error { .. }))
-        .collect();
-    assert!(
-        !error_events.is_empty(),
-        "Should have error events for package not found"
-    );
+    assert_failed_operation(&events);
 }
 
 #[tokio::test]
@@ -176,31 +80,28 @@ async fn test_service_check_no_check_command() {
     // Arrange
     let temp_dir = TempDir::new().unwrap();
     create_test_package_file(&temp_dir, "no-check-package", false);
-
-    let config = AppConfigBuilder::default()
-        .environment("test")
-        .package_directory(temp_dir.path())
-        .build();
-
-    let fs = RealFileSystem;
-    let repo = YamlPackageRepository::new(fs, config.package_directory().clone());
-    let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(30));
-    let service = PackageServiceImpl::new(repo, runner, config);
+    let service = create_service_test_service(&temp_dir);
 
     // Act
     let stream = service.check("no-check-package").await;
     let events = collect_events(stream).await;
 
     // Assert
-    let result = get_operation_result(&events).await;
-    assert!(result.is_some());
-    assert!(matches!(result.unwrap(), OperationResult::Failure(_)));
-
     // The service should fail when no check command is defined
-    // (This is expected behavior based on the service implementation)
-    let result = get_operation_result(&events).await;
+    let result = get_operation_result(&events);
     assert!(result.is_some());
-    assert!(matches!(result.unwrap(), OperationResult::Failure(_)));
+    assert!(matches!(result, Some(OperationResult::Failure(_))));
+
+    // Should have exactly one completed event with failure
+    let completed_events: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e, PackageEvent::Completed { .. }))
+        .collect();
+    assert_eq!(
+        completed_events.len(),
+        1,
+        "Should have exactly one completed event"
+    );
 }
 
 #[tokio::test]
@@ -208,25 +109,14 @@ async fn test_service_install_success() {
     // Arrange
     let temp_dir = TempDir::new().unwrap();
     create_test_package_file(&temp_dir, "install-package", true);
-
-    let config = AppConfigBuilder::default()
-        .environment("test")
-        .package_directory(temp_dir.path())
-        .build();
-
-    let fs = RealFileSystem;
-    let repo = YamlPackageRepository::new(fs, config.package_directory().clone());
-    let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(30));
-    let service = PackageServiceImpl::new(repo, runner, config);
+    let service = create_service_test_service(&temp_dir);
 
     // Act
     let stream = service.install("install-package").await;
     let events = collect_events(stream).await;
 
     // Assert
-    let result = get_operation_result(&events).await;
-    assert!(result.is_some());
-    assert!(matches!(result.unwrap(), OperationResult::Success(_)));
+    assert_successful_operation(&events);
 
     // Verify we have progress events for install (should be 5 steps)
     let progress_events: Vec<_> = events
@@ -247,25 +137,14 @@ async fn test_service_list_packages() {
     create_test_package_file(&temp_dir, "package-one", true);
     create_test_package_file(&temp_dir, "package-two", false);
     create_invalid_package_file(&temp_dir, "invalid-package");
-
-    let config = AppConfigBuilder::default()
-        .environment("test")
-        .package_directory(temp_dir.path())
-        .build();
-
-    let fs = RealFileSystem;
-    let repo = YamlPackageRepository::new(fs, config.package_directory().clone());
-    let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(30));
-    let service = PackageServiceImpl::new(repo, runner, config);
+    let service = create_service_test_service(&temp_dir);
 
     // Act
     let stream = service.list().await.unwrap();
     let events = collect_events(stream).await;
 
     // Assert
-    let result = get_operation_result(&events).await;
-    assert!(result.is_some());
-    assert!(matches!(result.unwrap(), OperationResult::Success(_)));
+    assert_successful_operation(&events);
 
     // Should have package list data
     let list_events: Vec<_> = events
@@ -306,25 +185,14 @@ async fn test_service_info_package() {
     // Arrange
     let temp_dir = TempDir::new().unwrap();
     create_test_package_file(&temp_dir, "info-package", true);
-
-    let config = AppConfigBuilder::default()
-        .environment("test")
-        .package_directory(temp_dir.path())
-        .build();
-
-    let fs = RealFileSystem;
-    let repo = YamlPackageRepository::new(fs, config.package_directory().clone());
-    let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(30));
-    let service = PackageServiceImpl::new(repo, runner, config);
+    let service = create_service_test_service(&temp_dir);
 
     // Act
     let stream = service.info("info-package").await.unwrap();
     let events = collect_events(stream).await;
 
     // Assert
-    let result = get_operation_result(&events).await;
-    assert!(result.is_some());
-    assert!(matches!(result.unwrap(), OperationResult::Success(_)));
+    assert_successful_operation(&events);
 
     // Should have package info data
     let info_events: Vec<_> = events
@@ -365,25 +233,14 @@ async fn test_service_validate_package() {
     // Arrange
     let temp_dir = TempDir::new().unwrap();
     create_test_package_file(&temp_dir, "valid-package", true);
-
-    let config = AppConfigBuilder::default()
-        .environment("test")
-        .package_directory(temp_dir.path())
-        .build();
-
-    let fs = RealFileSystem;
-    let repo = YamlPackageRepository::new(fs, config.package_directory().clone());
-    let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(30));
-    let service = PackageServiceImpl::new(repo, runner, config);
+    let service = create_service_test_service(&temp_dir);
 
     // Act
     let stream = service.validate("valid-package", None).await.unwrap();
     let events = collect_events(stream).await;
 
     // Assert
-    let result = get_operation_result(&events).await;
-    assert!(result.is_some());
-    assert!(matches!(result.unwrap(), OperationResult::Success(_)));
+    assert_successful_operation(&events);
 
     // Should have validation result data
     let validation_events: Vec<_> = events
@@ -404,16 +261,7 @@ async fn test_service_event_metadata() {
     // Arrange
     let temp_dir = TempDir::new().unwrap();
     create_test_package_file(&temp_dir, "metadata-test", true);
-
-    let config = AppConfigBuilder::default()
-        .environment("test")
-        .package_directory(temp_dir.path())
-        .build();
-
-    let fs = RealFileSystem;
-    let repo = YamlPackageRepository::new(fs, config.package_directory().clone());
-    let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(30));
-    let service = PackageServiceImpl::new(repo, runner, config);
+    let service = create_service_test_service(&temp_dir);
 
     // Act
     let stream = service.check("metadata-test").await;
@@ -456,35 +304,14 @@ async fn test_service_error_handling() {
     // Arrange
     let temp_dir = TempDir::new().unwrap();
     // Don't create any package files - this will cause repository errors
-
-    let config = AppConfigBuilder::default()
-        .environment("test")
-        .package_directory(temp_dir.path())
-        .build();
-
-    let fs = RealFileSystem;
-    let repo = YamlPackageRepository::new(fs, config.package_directory().clone());
-    let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(30));
-    let service = PackageServiceImpl::new(repo, runner, config);
+    let service = create_service_test_service(&temp_dir);
 
     // Act - try to check a non-existent package
     let stream = service.check("non-existent").await;
     let events = collect_events(stream).await;
 
     // Assert
-    let result = get_operation_result(&events).await;
-    assert!(result.is_some());
-    assert!(matches!(result.unwrap(), OperationResult::Failure(_)));
-
-    // Should have error events
-    let error_events: Vec<_> = events
-        .iter()
-        .filter(|e| matches!(e, PackageEvent::Error { .. }))
-        .collect();
-    assert!(
-        !error_events.is_empty(),
-        "Should have error events for failed operation"
-    );
+    assert_failed_operation(&events);
 
     // Should still have started and completed events even for failures
     let started_events: Vec<_> = events

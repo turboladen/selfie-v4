@@ -1571,6 +1571,7 @@ name = "test-common"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
+ "futures",
  "selfie",
  "serde_yaml",
  "tempfile",
