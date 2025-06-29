@@ -194,41 +194,23 @@ fn create_validation_table() -> Table {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use selfie::{
-        config::AppConfigBuilder,
-        package::event::{
-            ValidationIssueData, ValidationLevel, ValidationResultData, ValidationStatus,
-        },
+    use selfie::package::event::{
+        ValidationIssueData, ValidationLevel, ValidationResultData, ValidationStatus,
     };
-
-    fn create_test_config() -> selfie::config::AppConfig {
-        AppConfigBuilder::default()
-            .environment("test-env")
-            .package_directory("/tmp/test-packages")
-            .use_colors(false)
-            .build()
-    }
-
-    fn create_colored_config() -> selfie::config::AppConfig {
-        AppConfigBuilder::default()
-            .environment("test-env")
-            .package_directory("/tmp/test-packages")
-            .use_colors(true)
-            .build()
-    }
+    use test_common::{TEST_ENV, test_config, test_config_with_colors};
 
     fn create_test_validation_result(status: ValidationStatus) -> ValidationResultData {
         ValidationResultData {
             package_name: "test-package".to_string(),
-            environment: "test-env".to_string(),
+            environment: TEST_ENV.to_string(),
             status,
             issues: vec![],
         }
     }
 
     #[test]
-    fn test_display_validation_result_valid() {
-        let config = create_test_config();
+    fn test_display_validation_result_success() {
+        let config = test_config();
         let validation_result = create_test_validation_result(ValidationStatus::Valid);
 
         // Should not panic
@@ -237,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_display_validation_success_card() {
-        let config = create_test_config();
+        let config = test_config();
         let validation_result = create_test_validation_result(ValidationStatus::Valid);
 
         // Should not panic
@@ -245,8 +227,8 @@ mod tests {
     }
 
     #[test]
-    fn test_display_validation_success_card_with_colors() {
-        let config = create_colored_config();
+    fn test_display_validation_result_with_colors() {
+        let config = test_config_with_colors();
         let validation_result = create_test_validation_result(ValidationStatus::Valid);
 
         // Should not panic with colors enabled
@@ -255,7 +237,7 @@ mod tests {
 
     #[test]
     fn test_display_validation_issues_table_empty() {
-        let config = create_test_config();
+        let config = test_config();
         let validation_result = create_test_validation_result(ValidationStatus::Valid);
 
         // Should not display anything for empty issues
@@ -263,8 +245,8 @@ mod tests {
     }
 
     #[test]
-    fn test_display_validation_issues_table_with_issues() {
-        let config = create_test_config();
+    fn test_display_validation_result_with_issues() {
+        let config = test_config();
         let mut validation_result = create_test_validation_result(ValidationStatus::HasErrors);
         validation_result.issues = vec![ValidationIssueData {
             level: ValidationLevel::Error,

@@ -1,0 +1,17 @@
+[package]
+name = "test-common"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+selfie = { path = "../selfie/" }
+tempfile.workspace = true
+serde_yaml.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+assert_cmd = "2.0"
+
+# This crate is only for testing purposes
+[lib]
+doctest = false

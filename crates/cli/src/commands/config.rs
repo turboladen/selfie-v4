@@ -57,31 +57,7 @@ pub(crate) fn handle_validate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use selfie::config::AppConfigBuilder;
-
-    fn create_test_config() -> selfie::config::AppConfig {
-        AppConfigBuilder::default()
-            .environment("test-env")
-            .package_directory("/tmp/test-packages")
-            .use_colors(false)
-            .build()
-    }
-
-    fn create_colored_config() -> selfie::config::AppConfig {
-        AppConfigBuilder::default()
-            .environment("test-env")
-            .package_directory("/tmp/test-packages")
-            .use_colors(true)
-            .build()
-    }
-
-    fn create_verbose_config() -> selfie::config::AppConfig {
-        AppConfigBuilder::default()
-            .environment("test-env")
-            .package_directory("/tmp/test-packages")
-            .verbose(true)
-            .build()
-    }
+    use test_common::{test_config, test_config_verbose, test_config_with_colors};
 
     fn create_mock_reporter() -> TerminalProgressReporter {
         TerminalProgressReporter::new(false)
@@ -89,7 +65,7 @@ mod tests {
 
     #[test]
     fn test_handle_validate_function_does_not_panic() {
-        let config = create_test_config();
+        let config = test_config();
         let reporter = create_mock_reporter();
 
         // Test that the function doesn't panic and returns a valid exit code
@@ -99,7 +75,7 @@ mod tests {
 
     #[test]
     fn test_handle_validate_with_colors_enabled() {
-        let config = create_colored_config();
+        let config = test_config_with_colors();
         let reporter = TerminalProgressReporter::new(true);
 
         // Test that the function doesn't panic with colors enabled
@@ -109,7 +85,7 @@ mod tests {
 
     #[test]
     fn test_handle_validate_with_verbose_enabled() {
-        let config = create_verbose_config();
+        let config = test_config_verbose();
         let reporter = create_mock_reporter();
 
         // Test that the function doesn't panic with verbose enabled

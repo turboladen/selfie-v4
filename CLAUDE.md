@@ -28,13 +28,15 @@ environment.
 
 ## Project Organization
 
-There are two crates in the repo, both under the `crates/` subdirectory:
-`selfie-cli` (in `cli/`) which is the main UI (a CLI) for selfie, and `selfie`
-which is the library containing the logic for selfie. Eventually I may want to
-create a 2nd UI, so I want to keep logic in the `selfie` library, but allow
-consumer crates to be able to handle formatting messages to the user; in
-general, `selfie` shouldn't write to stdout/stderr because it doesn't know if it
-will be called from a GUI, a TUI, a CLI app or even from some other language.
+There are three crates in the repo, all under the `crates/` subdirectory:
+`selfie-cli` (in `cli/`) which is the main UI (a CLI) for selfie, `selfie` which
+is the library containing the logic for selfie, and `test-common` which are
+helper types and functions to use in tests (since setting up for testing often
+requires the same type of set up). Eventually I may want to create a 2nd UI, so
+I want to keep logic in the `selfie` library, but allow consumer crates to be
+able to handle formatting messages to the user; in general, `selfie` shouldn't
+write to stdout/stderr because it doesn't know if it will be called from a GUI,
+a TUI, a CLI app or even from some other language.
 
 ## Design Patterns
 

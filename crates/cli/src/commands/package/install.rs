@@ -22,23 +22,9 @@ pub(crate) fn handle_install(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use selfie::config::AppConfigBuilder;
-
-    fn create_test_config() -> selfie::config::AppConfig {
-        AppConfigBuilder::default()
-            .environment("test-env")
-            .package_directory("/tmp/test-packages")
-            .use_colors(false)
-            .build()
-    }
-
-    fn create_colored_config() -> selfie::config::AppConfig {
-        AppConfigBuilder::default()
-            .environment("test-env")
-            .package_directory("/tmp/test-packages")
-            .use_colors(true)
-            .build()
-    }
+    use test_common::{
+        test_config, test_config_for_env, test_config_with_colors, test_config_with_dir,
+    };
 
     fn create_mock_reporter() -> TerminalProgressReporter {
         TerminalProgressReporter::new(false)
@@ -46,7 +32,7 @@ mod tests {
 
     #[test]
     fn test_handle_install_basic() {
-        let config = create_test_config();
+        let config = test_config();
         let reporter = create_mock_reporter();
 
         let result = handle_install("test-package", &config, reporter);
@@ -55,7 +41,7 @@ mod tests {
 
     #[test]
     fn test_handle_install_with_colors() {
-        let config = create_colored_config();
+        let config = test_config_with_colors();
         let reporter = TerminalProgressReporter::new(true);
 
         let result = handle_install("test-package", &config, reporter);
@@ -64,7 +50,7 @@ mod tests {
 
     #[test]
     fn test_handle_install_different_package_names() {
-        let config = create_test_config();
+        let config = test_config();
 
         let test_cases = vec![
             "simple-package",
@@ -93,10 +79,7 @@ mod tests {
         ];
 
         for directory in test_directories {
-            let config = AppConfigBuilder::default()
-                .environment("test-env")
-                .package_directory(directory)
-                .build();
+            let config = test_config_with_dir(directory);
 
             let reporter = create_mock_reporter();
             let result = handle_install("test-package", &config, reporter);
@@ -106,7 +89,7 @@ mod tests {
 
     #[test]
     fn test_handle_install_empty_package_name() {
-        let config = create_test_config();
+        let config = test_config();
         let reporter = create_mock_reporter();
 
         let result = handle_install("", &config, reporter);
@@ -115,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_handle_install_package_name_with_special_characters() {
-        let config = create_test_config();
+        let config = test_config();
 
         let test_cases = vec![
             "package@1.0.0",
@@ -134,7 +117,7 @@ mod tests {
     #[test]
     fn test_handle_install_function_does_not_panic() {
         // Test that the function doesn't panic with various inputs
-        let config = create_test_config();
+        let config = test_config();
         let reporter = create_mock_reporter();
 
         // Should not panic even with unusual inputs
@@ -153,10 +136,7 @@ mod tests {
         ];
 
         for environment in test_environments {
-            let config = AppConfigBuilder::default()
-                .environment(environment)
-                .package_directory("/tmp/test-packages")
-                .build();
+            let config = test_config_for_env(environment);
 
             let reporter = create_mock_reporter();
             let result = handle_install("test-package", &config, reporter);
@@ -166,7 +146,7 @@ mod tests {
 
     #[test]
     fn test_handle_install_consistent_return_value() {
-        let config = create_test_config();
+        let config = test_config();
 
         // Multiple calls should return the same value
         for _ in 0..5 {

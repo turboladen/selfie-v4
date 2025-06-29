@@ -246,41 +246,23 @@ fn format_status(status: &EnvironmentStatus, use_colors: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use selfie::{
-        config::AppConfigBuilder,
-        package::event::{EnvironmentStatus, EnvironmentStatusData, PackageInfoData},
-    };
-
-    fn create_test_config() -> selfie::config::AppConfig {
-        AppConfigBuilder::default()
-            .environment("test-env")
-            .package_directory("/tmp/test-packages")
-            .use_colors(false)
-            .build()
-    }
-
-    fn create_colored_config() -> selfie::config::AppConfig {
-        AppConfigBuilder::default()
-            .environment("test-env")
-            .package_directory("/tmp/test-packages")
-            .use_colors(true)
-            .build()
-    }
+    use selfie::package::event::{EnvironmentStatus, EnvironmentStatusData, PackageInfoData};
+    use test_common::{ALT_TEST_ENV, TEST_ENV, TEST_VERSION, test_config, test_config_with_colors};
 
     fn create_test_package_info() -> PackageInfoData {
         PackageInfoData {
             name: "test-package".to_string(),
-            version: "1.0.0".to_string(),
+            version: TEST_VERSION.to_string(),
             description: Some("A test package".to_string()),
             homepage: Some("https://example.com".to_string()),
-            environments: vec!["test-env".to_string(), "prod-env".to_string()],
-            current_environment: "test-env".to_string(),
+            environments: vec![TEST_ENV.to_string(), ALT_TEST_ENV.to_string()],
+            current_environment: TEST_ENV.to_string(),
         }
     }
 
     fn create_test_environment_status(is_current: bool) -> EnvironmentStatusData {
         EnvironmentStatusData {
-            environment_name: if is_current { "test-env" } else { "prod-env" }.to_string(),
+            environment_name: if is_current { TEST_ENV } else { ALT_TEST_ENV }.to_string(),
             is_current,
             install_command: "apt install test-package".to_string(),
             check_command: Some("which test-package".to_string()),
@@ -295,7 +277,7 @@ mod tests {
 
     #[test]
     fn test_create_package_info_table() {
-        let config = create_test_config();
+        let config = test_config();
         let package_info = create_test_package_info();
 
         let table = create_package_info_table(&package_info, &config);
@@ -305,7 +287,7 @@ mod tests {
 
     #[test]
     fn test_create_package_info_table_with_colors() {
-        let config = create_colored_config();
+        let config = test_config_with_colors();
         let package_info = create_test_package_info();
 
         let table = create_package_info_table(&package_info, &config);
@@ -315,7 +297,7 @@ mod tests {
 
     #[test]
     fn test_create_environment_table() {
-        let config = create_test_config();
+        let config = test_config();
         let env_status = create_test_environment_status(true);
 
         let table = create_environment_table(&env_status, &config);
@@ -336,9 +318,9 @@ mod tests {
 
     #[test]
     fn test_format_environment_names() {
-        let config = create_test_config();
-        let environments = vec!["test-env".to_string(), "prod-env".to_string()];
-        let result = format_environment_names(&environments, "test-env", &config);
+        let config = test_config();
+        let environments = vec![TEST_ENV.to_string(), ALT_TEST_ENV.to_string()];
+        let result = format_environment_names(&environments, TEST_ENV, &config);
         // Just test that it doesn't panic
         assert!(!result.is_empty());
     }

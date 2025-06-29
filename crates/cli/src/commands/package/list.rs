@@ -152,23 +152,8 @@ fn format_environments(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use selfie::{config::AppConfigBuilder, package::event::PackageListItem};
-
-    fn create_test_config() -> selfie::config::AppConfig {
-        AppConfigBuilder::default()
-            .environment("test-env")
-            .package_directory("/tmp/test-packages")
-            .use_colors(false)
-            .build()
-    }
-
-    fn create_colored_config() -> selfie::config::AppConfig {
-        AppConfigBuilder::default()
-            .environment("test-env")
-            .package_directory("/tmp/test-packages")
-            .use_colors(true)
-            .build()
-    }
+    use selfie::package::event::PackageListItem;
+    use test_common::{ALT_TEST_ENV, TEST_ENV, TEST_VERSION, test_config, test_config_with_colors};
 
     fn create_mock_reporter() -> TerminalProgressReporter {
         TerminalProgressReporter::new(false)
@@ -176,7 +161,7 @@ mod tests {
 
     #[test]
     fn test_list_command_new() {
-        let config = create_test_config();
+        let config = test_config();
         let reporter = create_mock_reporter();
 
         let command = ListCommand::new(&config, reporter);
@@ -186,7 +171,7 @@ mod tests {
 
     #[test]
     fn test_display_packages_table_empty() {
-        let config = create_test_config();
+        let config = test_config();
         let packages = vec![];
 
         // Should not panic with empty list
@@ -195,11 +180,11 @@ mod tests {
 
     #[test]
     fn test_display_packages_table_single_package() {
-        let config = create_test_config();
+        let config = test_config();
         let packages = vec![PackageListItem {
             name: "test-package".to_string(),
-            version: "1.0.0".to_string(),
-            environments: vec!["test-env".to_string()],
+            version: TEST_VERSION.to_string(),
+            environments: vec![TEST_ENV.to_string()],
         }];
 
         // Should not panic
@@ -208,11 +193,11 @@ mod tests {
 
     #[test]
     fn test_display_packages_table_with_colors() {
-        let config = create_colored_config();
+        let config = test_config_with_colors();
         let packages = vec![PackageListItem {
             name: "test-package".to_string(),
-            version: "1.0.0".to_string(),
-            environments: vec!["test-env".to_string()],
+            version: TEST_VERSION.to_string(),
+            environments: vec![TEST_ENV.to_string()],
         }];
 
         // Should not panic with colors enabled
@@ -228,10 +213,10 @@ mod tests {
 
     #[test]
     fn test_format_environments() {
-        let config = create_test_config();
-        let environments = vec!["test-env".to_string(), "prod-env".to_string()];
+        let config = test_config();
+        let environments = vec![TEST_ENV.to_string(), ALT_TEST_ENV.to_string()];
 
-        let result = format_environments(&environments, "test-env", &config);
+        let result = format_environments(&environments, TEST_ENV, &config);
 
         // Just test that it doesn't panic and returns something
         assert!(!result.is_empty());
