@@ -211,7 +211,7 @@ async fn test_command_streaming_preserves_order() {
     // Verify ordering is preserved - each line should contain its sequential number
     for (index, line) in lines.iter().enumerate() {
         let expected_number = index + 1;
-        let expected_content = format!("Message {}", expected_number);
+        let expected_content = format!("Message {expected_number}");
         assert_eq!(
             line.trim(),
             expected_content,
@@ -279,15 +279,13 @@ async fn test_command_streaming_stdout_stderr_interleaving() {
     let stdout_combined = stdout_chunks.join("");
     assert!(
         stdout_combined.contains("stdout-line"),
-        "Should contain stdout content: '{}'",
-        stdout_combined
+        "Should contain stdout content: '{stdout_combined}'"
     );
 
     // Verify stderr content
     let stderr_combined = stderr_chunks.join("");
     assert!(
         stderr_combined.contains("stderr-line"),
-        "Should contain stderr content: '{}'",
-        stderr_combined
+        "Should contain stderr content: '{stderr_combined}'"
     );
 }

@@ -65,7 +65,7 @@ mod tests {
         for package_name in test_cases {
             let reporter = create_mock_reporter();
             let result = handle_install(package_name, &config, reporter);
-            assert_eq!(result, 0, "Failed for package: {}", package_name);
+            assert_eq!(result, 0, "Failed for package: {package_name}");
         }
     }
 
@@ -83,7 +83,7 @@ mod tests {
 
             let reporter = create_mock_reporter();
             let result = handle_install("test-package", &config, reporter);
-            assert_eq!(result, 0, "Failed for directory: {}", directory);
+            assert_eq!(result, 0, "Failed for directory: {directory}");
         }
     }
 
@@ -110,7 +110,7 @@ mod tests {
         for package_name in test_cases {
             let reporter = create_mock_reporter();
             let result = handle_install(package_name, &config, reporter);
-            assert_eq!(result, 0, "Failed for package: {}", package_name);
+            assert_eq!(result, 0, "Failed for package: {package_name}");
         }
     }
 
@@ -140,7 +140,7 @@ mod tests {
 
             let reporter = create_mock_reporter();
             let result = handle_install("test-package", &config, reporter);
-            assert_eq!(result, 0, "Failed for environment: {}", environment);
+            assert_eq!(result, 0, "Failed for environment: {environment}");
         }
     }
 

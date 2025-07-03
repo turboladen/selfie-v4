@@ -79,7 +79,7 @@ pub trait PackageService: Send + Sync {
     async fn create(&self, package_name: &str) -> Result<EventStream, PackageError>;
 }
 
-/// Implementation of the PackageService
+/// Implementation of the `PackageService`
 #[derive(Debug)]
 pub struct PackageServiceImpl<R, CR> {
     package_repository: R,

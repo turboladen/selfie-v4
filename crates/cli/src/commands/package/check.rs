@@ -22,7 +22,7 @@ pub(crate) async fn handle_check(
     tracing::debug!("Running check command for package: {}", package_name);
 
     // Create the repository and command runner
-    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().to_path_buf());
+    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
     let command_runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
 
     // Create the package service implementation with our repository and command runner
@@ -151,12 +151,12 @@ fn display_check_result_card(check_result: &CheckResultData, config: &AppConfig)
                     error
                 )
             } else {
-                format!("   Status: ❌ Error\n   Details: {}", error)
+                format!("   Status: ❌ Error\n   Details: {error}")
             }
         }
     };
 
-    println!("{}", status_line);
+    println!("{status_line}");
 }
 
 #[cfg(test)]
@@ -187,7 +187,7 @@ mod tests {
             environment: TEST_ENV.to_string(),
             check_command: Some("which missing-command".to_string()),
             result: CheckResult::Failed {
-                stdout: "".to_string(),
+                stdout: String::new(),
                 stderr: "command not found".to_string(),
                 exit_code: Some(1),
             },

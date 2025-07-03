@@ -27,12 +27,12 @@ where
     let package = match repo.get_package(package_name) {
         Ok(pkg) => {
             sender
-                .send_debug(format!("Successfully loaded package: {}", package_name))
+                .send_debug(format!("Successfully loaded package: {package_name}"))
                 .await;
             pkg
         }
         Err(err) => {
-            let error_msg = format!("Failed to load package '{}': {}", package_name, err);
+            let error_msg = format!("Failed to load package '{package_name}': {err}");
             sender.send_error(err, &error_msg).await;
             return OperationResult::Failure(error_msg);
         }
@@ -42,16 +42,14 @@ where
 
     // Step 2: Get environment-specific check command
     let current_env = config.environment();
-    let env_config = match package.environments().get(current_env) {
-        Some(config) => config,
-        None => {
-            let error_msg = format!(
-                "No configuration found for package '{}' in environment '{}'",
-                package_name, current_env
-            );
-            sender.send_warning(&error_msg).await;
-            return OperationResult::Failure(error_msg);
-        }
+    let env_config = if let Some(config) = package.environments().get(current_env) {
+        config
+    } else {
+        let error_msg = format!(
+            "No configuration found for package '{package_name}' in environment '{current_env}'"
+        );
+        sender.send_warning(&error_msg).await;
+        return OperationResult::Failure(error_msg);
     };
 
     let check_command = env_config.check.as_ref();
@@ -67,8 +65,7 @@ where
         sender.send_check_result(check_result).await;
 
         let error_msg = format!(
-            "No check command defined for package '{}' in environment '{}'",
-            package_name, current_env
+            "No check command defined for package '{package_name}' in environment '{current_env}'"
         );
         return OperationResult::Failure(error_msg);
     }
@@ -76,8 +73,7 @@ where
     let check_command = check_command.unwrap();
     sender
         .send_debug(format!(
-            "Found check command for environment '{}': {}",
-            current_env, check_command
+            "Found check command for environment '{current_env}': {check_command}"
         ))
         .await;
 

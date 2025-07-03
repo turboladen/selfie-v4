@@ -145,8 +145,7 @@ impl EventProcessor {
                         handle_directory_not_found(path, self.reporter);
                     }
                     _ => {
-                        self.reporter
-                            .report_error(format!("{}: {}", message, error));
+                        self.reporter.report_error(format!("{message}: {error}"));
                     }
                 }
                 *exit_code = 1;
@@ -164,7 +163,7 @@ impl EventProcessor {
 
             PackageEvent::Canceled { reason, .. } => {
                 self.reporter
-                    .report_warning(format!("Operation canceled: {}", reason));
+                    .report_warning(format!("Operation canceled: {reason}"));
                 *exit_code = 1;
                 return true; // Stop processing after cancellation
             }
@@ -202,10 +201,10 @@ impl EventProcessor {
     fn handle_console_output(&self, output: ConsoleOutput) {
         match output {
             ConsoleOutput::Stdout(msg) => {
-                println!("{}", msg);
+                println!("{msg}");
             }
             ConsoleOutput::Stderr(msg) => {
-                eprintln!("{}", msg);
+                eprintln!("{msg}");
             }
         }
     }
@@ -306,8 +305,7 @@ mod tests {
             .use_colors(false)
             .build();
 
-        let repo =
-            YamlPackageRepository::new(RealFileSystem, config.package_directory().to_path_buf());
+        let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
         let command_runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
         let service = PackageServiceImpl::new(repo, command_runner, config);
 
@@ -343,8 +341,7 @@ mod tests {
             .use_colors(false)
             .build();
 
-        let repo =
-            YamlPackageRepository::new(RealFileSystem, config.package_directory().to_path_buf());
+        let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
         let command_runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
         let service = PackageServiceImpl::new(repo, command_runner, config);
 
@@ -402,8 +399,7 @@ mod tests {
             .use_colors(false)
             .build();
 
-        let repo =
-            YamlPackageRepository::new(RealFileSystem, config.package_directory().to_path_buf());
+        let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
         let command_runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
         let service = PackageServiceImpl::new(repo, command_runner, config);
 
@@ -415,14 +411,11 @@ mod tests {
         let event_stream = service.check("nonexistent-test-package").await;
         let exit_code = processor
             .process_events_with_handler(event_stream, |event, _reporter| {
-                match event {
-                    PackageEvent::Started { .. } => {
-                        Some(false) // Stop processing immediately after started
-                    }
-                    _ => {
-                        events_after_started += 1;
-                        None // Should not reach here
-                    }
+                if let PackageEvent::Started { .. } = event {
+                    Some(false) // Stop processing immediately after started
+                } else {
+                    events_after_started += 1;
+                    None // Should not reach here
                 }
             })
             .await;

@@ -38,7 +38,7 @@ impl EventSender {
             timestamp: Instant::now(),
         };
 
-        Self { tx, operation_info }
+        Self { operation_info, tx }
     }
 
     pub(crate) async fn send(&self, event: PackageEvent) {
@@ -287,7 +287,7 @@ pub struct OperationInfo {
 /// Additional context that operations might need
 ///
 /// This provides a way to pass operation-specific data that doesn't belong
-/// in the core OperationInfo but is useful for certain operations.
+/// in the core `OperationInfo` but is useful for certain operations.
 ///
 /// # Examples
 ///
@@ -521,7 +521,7 @@ pub enum ValidationLevel {
     Warning,
 }
 
-/// Log levels for the EventSender log method
+/// Log levels for the `EventSender` log method
 #[derive(Debug, Clone, Copy)]
 pub enum LogLevel {
     Trace,

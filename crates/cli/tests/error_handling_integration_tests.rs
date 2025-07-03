@@ -31,7 +31,7 @@ fn test_missing_config_file_error() {
 fn test_invalid_yaml_config_error() {
     let temp_dir = tempfile::tempdir().unwrap();
     let config_dir = temp_dir.path();
-    fs::create_dir_all(&config_dir).unwrap();
+    fs::create_dir_all(config_dir).unwrap();
 
     // Create invalid YAML config
     let config_path = config_dir.join("config.yaml");

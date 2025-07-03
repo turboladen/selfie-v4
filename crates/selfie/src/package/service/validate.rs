@@ -32,12 +32,12 @@ where
     let package = match repo.get_package(package_name) {
         Ok(pkg) => {
             sender
-                .send_debug(format!("Successfully loaded package: {}", package_name))
+                .send_debug(format!("Successfully loaded package: {package_name}"))
                 .await;
             pkg
         }
         Err(err) => {
-            let error_msg = format!("Failed to load package '{}': {}", package_name, err);
+            let error_msg = format!("Failed to load package '{package_name}': {err}");
             sender.send_error(err, &error_msg).await;
             return OperationResult::Failure(error_msg);
         }
@@ -61,7 +61,7 @@ where
             field: error.field().to_string(),
             message: error.message().to_string(),
             level: ValidationLevel::Error,
-            suggestion: error.suggestion().map(|s| s.to_string()),
+            suggestion: error.suggestion().map(std::string::ToString::to_string),
         });
     }
 
@@ -71,7 +71,7 @@ where
             field: warning.field().to_string(),
             message: warning.message().to_string(),
             level: ValidationLevel::Warning,
-            suggestion: warning.suggestion().map(|s| s.to_string()),
+            suggestion: warning.suggestion().map(std::string::ToString::to_string),
         });
     }
 

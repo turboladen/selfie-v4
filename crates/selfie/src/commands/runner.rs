@@ -84,7 +84,7 @@ impl CommandOutput {
 
     #[must_use]
     pub fn stderr_str(&self) -> Cow<'_, str> {
-        String::from_utf8_lossy(&self.output.stdout)
+        String::from_utf8_lossy(&self.output.stderr)
     }
 
     #[must_use]

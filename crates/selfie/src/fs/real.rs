@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_filesystem_error_from_io_error() {
-        let io_error = std::io::Error::new(std::io::ErrorKind::Other, "test error");
+        let io_error = std::io::Error::other("test error");
         let fs_error = FileSystemError::from(io_error);
 
         match fs_error {

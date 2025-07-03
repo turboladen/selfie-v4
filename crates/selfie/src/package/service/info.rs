@@ -31,12 +31,12 @@ where
     let package = match repo.get_package(package_name) {
         Ok(pkg) => {
             sender
-                .send_debug(format!("Successfully loaded package: {}", package_name))
+                .send_debug(format!("Successfully loaded package: {package_name}"))
                 .await;
             pkg
         }
         Err(err) => {
-            let error_msg = format!("Failed to load package '{}': {}", package_name, err);
+            let error_msg = format!("Failed to load package '{package_name}': {err}");
             sender.send_error(err, &error_msg).await;
             return OperationResult::Failure(error_msg);
         }
@@ -48,8 +48,8 @@ where
     let package_info = PackageInfoData {
         name: package.name().to_string(),
         version: package.version().to_string(),
-        description: package.description().map(|s| s.to_string()),
-        homepage: package.homepage().map(|s| s.to_string()),
+        description: package.description().map(std::string::ToString::to_string),
+        homepage: package.homepage().map(std::string::ToString::to_string),
         environments: package.environments().keys().cloned().collect(),
         current_environment: config.environment().to_string(),
     };
@@ -86,7 +86,7 @@ where
             environment_name: env_name.clone(),
             is_current,
             install_command: env_config.install().to_string(),
-            check_command: env_config.check().map(|s| s.to_string()),
+            check_command: env_config.check().map(std::string::ToString::to_string),
             dependencies: env_config.dependencies().to_vec(),
             status,
         };

@@ -27,6 +27,7 @@ pub async fn collect_events(mut stream: EventStream) -> Vec<PackageEvent> {
 /// let result = get_operation_result(&events);
 /// assert!(matches!(result, Some(OperationResult::Success(_))));
 /// ```
+#[must_use]
 pub fn get_operation_result(events: &[PackageEvent]) -> Option<&OperationResult> {
     for event in events {
         if let PackageEvent::Completed { result, .. } = event {
@@ -90,8 +91,7 @@ pub fn assert_successful_operation(events: &[PackageEvent]) {
     let result = get_operation_result(events).expect("Should have an operation result");
     assert!(
         matches!(result, OperationResult::Success(_)),
-        "Operation should be successful, got: {:?}",
-        result
+        "Operation should be successful, got: {result:?}"
     );
 }
 
@@ -117,8 +117,7 @@ pub fn assert_failed_operation(events: &[PackageEvent]) {
     if let Some(result) = get_operation_result(events) {
         assert!(
             matches!(result, OperationResult::Failure(_)),
-            "Operation result should be failure, got: {:?}",
-            result
+            "Operation result should be failure, got: {result:?}"
         );
     }
 }
@@ -148,9 +147,7 @@ pub fn assert_has_progress_steps(events: &[PackageEvent], expected_steps: &[&str
             progress_messages
                 .iter()
                 .any(|msg| msg.contains(expected_step)),
-            "Expected progress step '{}' not found in messages: {:?}",
-            expected_step,
-            progress_messages
+            "Expected progress step '{expected_step}' not found in messages: {progress_messages:?}"
         );
     }
 }
@@ -164,6 +161,7 @@ pub fn assert_has_progress_steps(events: &[PackageEvent], expected_steps: &[&str
 /// let errors = get_error_messages(&events);
 /// assert!(errors.iter().any(|msg| msg.contains("Package not found")));
 /// ```
+#[must_use]
 pub fn get_error_messages(events: &[PackageEvent]) -> Vec<String> {
     events
         .iter()

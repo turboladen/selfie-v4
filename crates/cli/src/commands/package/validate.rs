@@ -24,7 +24,7 @@ pub(crate) async fn handle_validate(
     tracing::debug!("Running validate command for package: {}", package_name);
 
     // Create the repository and command runner
-    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().to_path_buf());
+    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
     let command_runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
 
     // Create the package service implementation
@@ -42,7 +42,7 @@ pub(crate) async fn handle_validate(
                 .await
         }
         Err(e) => {
-            reporter.report_error(format!("Failed to validate package: {}", e));
+            reporter.report_error(format!("Failed to validate package: {e}"));
             1
         }
     }
@@ -100,7 +100,7 @@ fn display_validation_success_card(validation_result: &ValidationResultData, con
     } else {
         "   Status: ✅ Valid".to_string()
     };
-    println!("{}", status);
+    println!("{status}");
 }
 
 fn display_validation_issues_table(validation_result: &ValidationResultData, config: &AppConfig) {
@@ -123,17 +123,14 @@ fn display_validation_issues_table(validation_result: &ValidationResultData, con
         .count();
 
     let summary = if error_count > 0 && warning_count > 0 {
-        format!(
-            "📋 Validation Issues ({} error(s), {} warning(s)):",
-            error_count, warning_count
-        )
+        format!("📋 Validation Issues ({error_count} error(s), {warning_count} warning(s)):")
     } else if error_count > 0 {
-        format!("📋 Validation Errors ({}):", error_count)
+        format!("📋 Validation Errors ({error_count}):")
     } else {
-        format!("📋 Validation Warnings ({}):", warning_count)
+        format!("📋 Validation Warnings ({warning_count}):")
     };
 
-    println!("{}", summary);
+    println!("{summary}");
 
     let mut table = create_validation_table();
     table.set_header(vec!["Level", "Category", "Field", "Message", "Suggestion"]);
@@ -179,7 +176,7 @@ fn display_validation_issues_table(validation_result: &ValidationResultData, con
         ]);
     }
 
-    println!("{}", table);
+    println!("{table}");
 }
 
 fn create_validation_table() -> Table {

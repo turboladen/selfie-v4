@@ -1,4 +1,4 @@
-//! AppConfig test helpers to eliminate duplication across CLI command tests.
+//! `AppConfig` test helpers to eliminate duplication across CLI command tests.
 
 use crate::constants::{SERVICE_TEST_ENV, TEST_ENV, TEST_PACKAGE_DIR};
 use selfie::config::{AppConfig, AppConfigBuilder};
@@ -6,6 +6,7 @@ use std::path::Path;
 
 /// Creates a standard test configuration with colors disabled.
 /// This is the most commonly used config in CLI command tests.
+#[must_use]
 pub fn test_config() -> AppConfig {
     AppConfigBuilder::default()
         .environment(TEST_ENV)
@@ -16,6 +17,7 @@ pub fn test_config() -> AppConfig {
 
 /// Creates a test configuration with colors enabled.
 /// Used for testing colored output formatting.
+#[must_use]
 pub fn test_config_with_colors() -> AppConfig {
     AppConfigBuilder::default()
         .environment(TEST_ENV)
@@ -26,6 +28,7 @@ pub fn test_config_with_colors() -> AppConfig {
 
 /// Creates a verbose test configuration.
 /// Used for testing verbose output modes.
+#[must_use]
 pub fn test_config_verbose() -> AppConfig {
     AppConfigBuilder::default()
         .environment(TEST_ENV)
@@ -37,6 +40,7 @@ pub fn test_config_verbose() -> AppConfig {
 
 /// Creates a test configuration for a specific environment.
 /// Useful for testing environment-specific behavior.
+#[must_use]
 pub fn test_config_for_env(environment: &str) -> AppConfig {
     AppConfigBuilder::default()
         .environment(environment)

@@ -29,10 +29,8 @@ impl<'a> ListCommand<'a> {
 impl ListCommand<'_> {
     pub(crate) async fn handle_command(&self) -> i32 {
         // Create the repository and command runner
-        let repo = YamlPackageRepository::new(
-            RealFileSystem,
-            self.config.package_directory().to_path_buf(),
-        );
+        let repo =
+            YamlPackageRepository::new(RealFileSystem, self.config.package_directory().clone());
         let command_runner = ShellCommandRunner::new("/bin/sh", self.config.command_timeout());
 
         // Create the package service implementation
@@ -51,7 +49,7 @@ impl ListCommand<'_> {
             }
             Err(e) => {
                 self.reporter
-                    .report_error(format!("Failed to list packages: {}", e));
+                    .report_error(format!("Failed to list packages: {e}"));
                 1
             }
         }
@@ -112,7 +110,7 @@ fn display_packages_table(
         table.add_row(vec![package_name, version, environments]);
     }
 
-    println!("{}", table);
+    println!("{table}");
 }
 
 fn create_table() -> Table {

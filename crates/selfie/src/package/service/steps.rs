@@ -44,30 +44,24 @@ pub async fn find_environment_config<'a>(
     progress
         .next(
             sender,
-            format!(
-                "Checking if package supports current environment: {}",
-                environment
-            ),
+            format!("Checking if package supports current environment: {environment}"),
         )
         .await;
 
-    match package.environments().get(environment) {
-        Some(env_config) => {
-            sender
-                .send_trace("Current environment supported by package")
-                .await;
-            Ok(env_config)
-        }
-        None => {
-            sender
-                .send_warning(format!(
-                    "Package '{}' does not support environment '{}'",
-                    package.name(),
-                    environment
-                ))
-                .await;
-            Err("Environment not supported".into())
-        }
+    if let Some(env_config) = package.environments().get(environment) {
+        sender
+            .send_trace("Current environment supported by package")
+            .await;
+        Ok(env_config)
+    } else {
+        sender
+            .send_warning(format!(
+                "Package '{}' does not support environment '{}'",
+                package.name(),
+                environment
+            ))
+            .await;
+        Err("Environment not supported".into())
     }
 }
 
@@ -86,22 +80,19 @@ pub async fn get_command<'a>(
         )
         .await;
 
-    match command_getter(env_config) {
-        Some(cmd) => {
-            sender
-                .send_trace(format!("Package has `{command_type}` command"))
-                .await;
-            Ok(cmd)
-        }
-        None => {
-            progress
-                .next(
-                    sender,
-                    format!("Package does not have `{command_type}` command"),
-                )
-                .await;
-            Err(format!("No {command_type} command defined").into())
-        }
+    if let Some(cmd) = command_getter(env_config) {
+        sender
+            .send_trace(format!("Package has `{command_type}` command"))
+            .await;
+        Ok(cmd)
+    } else {
+        progress
+            .next(
+                sender,
+                format!("Package does not have `{command_type}` command"),
+            )
+            .await;
+        Err(format!("No {command_type} command defined").into())
     }
 }
 

@@ -33,7 +33,7 @@ where
             output
         }
         Err(err) => {
-            let error_msg = format!("Failed to list packages: {}", err);
+            let error_msg = format!("Failed to list packages: {err}");
             let repo_error = crate::package::port::PackageRepoError::PackageListError(err);
             sender.send_error(repo_error, &error_msg).await;
             return OperationResult::Failure(error_msg);
@@ -86,7 +86,7 @@ where
         "Package listing completed with {} valid package(s){}",
         valid_packages.len(),
         if invalid_packages.is_empty() {
-            "".to_string()
+            String::new()
         } else {
             format!(" and {} invalid package(s)", invalid_packages.len())
         }

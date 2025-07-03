@@ -458,7 +458,7 @@ mod tests {
                 ConfigLoadError::FileSystemError(FileSystemError::IoError(e)) => {
                     assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied);
                 }
-                other => panic!("Expected FileSystemError::IoError, got: {:?}", other),
+                other => panic!("Expected FileSystemError::IoError, got: {other:?}"),
             }
         }
 
@@ -478,7 +478,7 @@ mod tests {
                 ConfigLoadError::NotFound { searched } => {
                     assert_eq!(searched, PathBuf::from("~/.config/selfie"));
                 }
-                other => panic!("Expected ConfigLoadError::NotFound, got: {:?}", other),
+                other => panic!("Expected ConfigLoadError::NotFound, got: {other:?}"),
             }
         }
 

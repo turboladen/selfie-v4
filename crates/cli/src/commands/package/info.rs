@@ -24,7 +24,7 @@ pub(crate) async fn handle_info(
     tracing::debug!("Finding package info for: {}", package_name);
 
     // Create the repository and command runner
-    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().to_path_buf());
+    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
     let command_runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
 
     // Create the package service implementation
@@ -42,7 +42,7 @@ pub(crate) async fn handle_info(
                 .await
         }
         Err(e) => {
-            reporter.report_error(format!("Failed to get package info: {}", e));
+            reporter.report_error(format!("Failed to get package info: {e}"));
             1
         }
     }
@@ -52,14 +52,14 @@ fn handle_info_event(event: &PackageEvent, config: &AppConfig) -> Option<bool> {
     match event {
         PackageEvent::PackageInfoLoaded { package_info, .. } => {
             let table = create_package_info_table(package_info, config);
-            println!("{}", table);
+            println!("{table}");
             Some(true) // Continue processing
         }
         PackageEvent::EnvironmentStatusChecked {
             environment_status, ..
         } => {
             let table = create_environment_table(environment_status, config);
-            println!("\n{}", table);
+            println!("\n{table}");
             Some(true) // Continue processing
         }
         _ => None, // Use default handling for other events
@@ -233,7 +233,7 @@ fn format_status(status: &EnvironmentStatus, use_colors: bool) -> String {
             }
         }
         EnvironmentStatus::Unknown(reason) => {
-            let msg = format!("Unknown ({})", reason);
+            let msg = format!("Unknown ({reason})");
             if use_colors {
                 style(msg).yellow().italic().to_string()
             } else {

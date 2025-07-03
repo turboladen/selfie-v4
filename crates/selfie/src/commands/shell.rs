@@ -171,7 +171,7 @@ impl CommandRunner for ShellCommandRunner {
 async fn handle_chunked_read_result(
     result: Result<usize, tokio::io::Error>,
     full_output: &mut Vec<u8>,
-    buffer: &mut Vec<u8>,
+    buffer: &mut [u8],
     tx: &mpsc::Sender<OutputChunk>,
     output_type: fn(String) -> OutputChunk,
 ) -> Result<(), CommandError> {
@@ -290,7 +290,8 @@ mod tests {
         // Either way, we're testing that the command runner handles the scenario
         if let Ok(output) = result {
             assert!(
-                output.stdout_str().contains("permission denied") || output.stderr_str().len() > 0
+                output.stdout_str().contains("permission denied")
+                    || !output.stderr_str().is_empty()
             );
         }
         // If it fails, that's also acceptable for this test
@@ -317,7 +318,7 @@ mod tests {
         let timeout_error = CommandError::Timeout(Duration::from_millis(100));
         assert_eq!(timeout_error.to_string(), "Command timed out after 100ms");
 
-        let io_error = std::io::Error::new(std::io::ErrorKind::Other, "test error");
+        let io_error = std::io::Error::other("test error");
         let cmd_error = CommandError::IoError(Arc::new(io_error));
         assert_eq!(cmd_error.to_string(), "IO Error: test error");
 

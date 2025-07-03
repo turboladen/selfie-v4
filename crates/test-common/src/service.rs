@@ -14,6 +14,7 @@ use tempfile::TempDir;
 
 /// Creates a test service with real filesystem and default settings.
 /// This is the most commonly used service setup for integration tests.
+#[must_use]
 pub fn create_test_service(
     temp_dir: &TempDir,
 ) -> PackageServiceImpl<YamlPackageRepository<RealFileSystem>, ShellCommandRunner> {
@@ -23,6 +24,7 @@ pub fn create_test_service(
 
 /// Creates a test service with a specific configuration.
 /// Useful when you need custom config settings like different environments.
+#[must_use]
 pub fn create_test_service_with_config(
     config: AppConfig,
 ) -> PackageServiceImpl<YamlPackageRepository<RealFileSystem>, ShellCommandRunner> {
@@ -34,6 +36,7 @@ pub fn create_test_service_with_config(
 
 /// Creates a test service with custom command timeout.
 /// Useful for testing timeout scenarios or when you need longer-running commands.
+#[must_use]
 pub fn create_test_service_with_timeout(
     temp_dir: &TempDir,
     timeout: Duration,
@@ -47,6 +50,7 @@ pub fn create_test_service_with_timeout(
 
 /// Creates a test service for a specific environment.
 /// Useful for testing environment-specific behavior.
+#[must_use]
 pub fn create_test_service_for_env(
     temp_dir: &TempDir,
     environment: &str,
@@ -57,16 +61,18 @@ pub fn create_test_service_for_env(
 
 /// Creates the standard CLI service setup used in command handlers.
 /// This matches the exact pattern used in CLI commands for consistency.
+#[must_use]
 pub fn create_cli_service(
     config: &AppConfig,
 ) -> PackageServiceImpl<YamlPackageRepository<RealFileSystem>, ShellCommandRunner> {
-    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().to_path_buf());
+    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
     let command_runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
     PackageServiceImpl::new(repo, command_runner, config.clone())
 }
 
 /// Creates a test service specifically for service layer integration tests.
 /// Uses the correct "test" environment expected by service tests.
+#[must_use]
 pub fn create_service_test_service(
     temp_dir: &TempDir,
 ) -> PackageServiceImpl<YamlPackageRepository<RealFileSystem>, ShellCommandRunner> {

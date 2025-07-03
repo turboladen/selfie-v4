@@ -29,7 +29,7 @@ where
     let package = match steps::fetch_package(repo, package_name, sender, progress).await {
         Ok(pkg) => pkg,
         Err(err) => {
-            let error_msg = format!("Failed to fetch package '{}': {}", package_name, err);
+            let error_msg = format!("Failed to fetch package '{package_name}': {err}");
             return OperationResult::Failure(error_msg);
         }
     };
@@ -45,7 +45,7 @@ where
     {
         Ok(config) => config,
         Err(err) => {
-            let error_msg = format!("Environment configuration error: {}", err);
+            let error_msg = format!("Environment configuration error: {err}");
             return OperationResult::Failure(error_msg);
         }
     };
@@ -62,7 +62,7 @@ where
     {
         Ok(cmd) => cmd,
         Err(err) => {
-            let error_msg = format!("Install command error: {}", err);
+            let error_msg = format!("Install command error: {err}");
             return OperationResult::Failure(error_msg);
         }
     };
@@ -80,7 +80,7 @@ where
     {
         Ok(success) => success,
         Err(err) => {
-            let error_msg = format!("Command execution error: {}", err);
+            let error_msg = format!("Command execution error: {err}");
             return OperationResult::Failure(error_msg);
         }
     };
@@ -98,8 +98,7 @@ where
     } else {
         sender
             .send_warning(format!(
-                "Package '{}' installation command failed",
-                package_name
+                "Package '{package_name}' installation command failed"
             ))
             .await;
         OperationResult::Failure(format!(
