@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt, process::Output, sync::Arc, time::Duration};
+use std::{borrow::Cow, fmt, path::PathBuf, process::Output, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -96,11 +96,30 @@ impl CommandOutput {
 /// Errors that can occur during command execution
 #[derive(Error, Debug, Clone)]
 pub enum CommandError {
-    #[error("Command timed out after {0:?}")]
-    Timeout(Duration),
+    #[error("Command timed out after {timeout:?}: {command}")]
+    Timeout {
+        command: String,
+        timeout: Duration,
+        working_directory: PathBuf,
+    },
 
-    #[error("IO Error: {0}")]
-    IoError(#[from] Arc<std::io::Error>),
+    #[error("IO Error executing command '{command}': {source}")]
+    IoError {
+        command: String,
+        working_directory: PathBuf,
+        #[source]
+        source: Arc<std::io::Error>,
+    },
+
+    #[error("Command failed with exit code {exit_code}: {command}")]
+    NonZeroExit {
+        command: String,
+        exit_code: i32,
+        stdout: String,
+        stderr: String,
+        working_directory: PathBuf,
+        execution_duration: Duration,
+    },
 
     #[error("Failed spawning stdout during command: {0}")]
     StdoutSpawn(String),

@@ -5,7 +5,7 @@ use crate::{
     config::AppConfig,
     package::{
         event::{CheckResult, CheckResultData, EventSender, OperationResult},
-        port::PackageRepository,
+        port::{PackageRepoError, PackageRepository},
     },
 };
 
@@ -40,21 +40,49 @@ where
 
     progress.next(sender, "Checking package environment").await;
 
-    // Step 2: Get environment-specific check command
+    // Step 2: Get environment-specific check command with rich error context
     let current_env = config.environment();
     let env_config = if let Some(config) = package.environments().get(current_env) {
         config
     } else {
-        let error_msg = format!(
-            "No configuration found for package '{package_name}' in environment '{current_env}'"
-        );
-        sender.send_warning(&error_msg).await;
+        use crate::package::port::PackageError;
+        let err = PackageError::EnvironmentNotFound {
+            package_name: package_name.to_string(),
+            environment: current_env.to_string(),
+            available_environments: package.environments().keys().cloned().collect(),
+            package_file: package.path().clone(),
+        };
+        let error_msg = format!("Environment configuration error: {err}");
+        sender
+            .send_error(PackageRepoError::PackageError(err), &error_msg)
+            .await;
         return OperationResult::Failure(error_msg);
     };
 
-    let check_command = env_config.check.as_ref();
+    let check_command = if let Some(check_cmd) = env_config.check.as_ref() {
+        check_cmd
+    } else {
+        use crate::package::port::PackageError;
+        // Find other environments that do have check commands
+        let other_envs_with_check: Vec<String> = package
+            .environments()
+            .iter()
+            .filter_map(|(env_name, env_config)| {
+                if env_config.check.is_some() {
+                    Some(env_name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
 
-    if check_command.is_none() {
+        let err = PackageError::NoCheckCommand {
+            package_name: package_name.to_string(),
+            environment: current_env.to_string(),
+            package_file: package.path().clone(),
+            other_envs_with_check,
+        };
+
         // Send structured result for no check command
         let check_result = CheckResultData {
             package_name: package_name.to_string(),
@@ -64,13 +92,12 @@ where
         };
         sender.send_check_result(check_result).await;
 
-        let error_msg = format!(
-            "No check command defined for package '{package_name}' in environment '{current_env}'"
-        );
+        let error_msg = format!("Check command configuration error: {err}");
+        sender
+            .send_error(PackageRepoError::PackageError(err), &error_msg)
+            .await;
         return OperationResult::Failure(error_msg);
-    }
-
-    let check_command = check_command.unwrap();
+    };
     sender
         .send_debug(format!(
             "Found check command for environment '{current_env}': {check_command}"

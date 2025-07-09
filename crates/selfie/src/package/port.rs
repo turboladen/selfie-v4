@@ -40,6 +40,9 @@ pub enum PackageRepoError {
 
     #[error(transparent)]
     PackageListError(#[from] PackageListError),
+
+    #[error("IO error: {0}")]
+    IoError(#[from] Arc<std::io::Error>),
 }
 
 #[derive(Error, Debug, Clone)]
@@ -57,19 +60,50 @@ pub enum PackageError {
     PackageNotFound {
         name: String,
         packages_path: PathBuf,
+        /// Number of files examined during search
+        files_examined: usize,
+        /// Search patterns used (e.g., ["package.yml", "package.yaml"])
+        search_patterns: Vec<String>,
     },
+
     #[error("Multiple packages found with name `{name}` in path {}", packages_path.display())]
     MultiplePackagesFound {
         name: String,
         packages_path: PathBuf,
+        /// The conflicting file paths found
+        conflicting_paths: Vec<PathBuf>,
+        files_examined: usize,
+        search_patterns: Vec<String>,
     },
 
-    #[error("Parse error `{source}` from package `{name}` in path {}", packages_path.display())]
+    #[error("Parse error in package `{name}` from {}", packages_path.display())]
     ParseError {
         name: String,
         packages_path: PathBuf,
+        /// The specific file that failed to parse
+        failed_file: PathBuf,
+        /// File size for debugging
+        file_size_bytes: u64,
         #[source]
         source: PackageParseError,
+    },
+
+    #[error("Environment `{environment}` not found in package `{package_name}`")]
+    EnvironmentNotFound {
+        package_name: String,
+        environment: String,
+        /// Available environments for suggestions
+        available_environments: Vec<String>,
+        package_file: PathBuf,
+    },
+
+    #[error("No check command defined for package `{package_name}` in environment `{environment}`")]
+    NoCheckCommand {
+        package_name: String,
+        environment: String,
+        package_file: PathBuf,
+        /// Whether other environments have check commands (for suggestions)
+        other_envs_with_check: Vec<String>,
     },
 }
 

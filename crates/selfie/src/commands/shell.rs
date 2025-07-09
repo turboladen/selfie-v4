@@ -1,13 +1,14 @@
 // Shell command runner adapter implementation
 
 use std::{
+    path::Path,
     process::{Output, Stdio},
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use async_trait::async_trait;
-use futures::TryFutureExt;
+
 use tokio::{io::AsyncReadExt, process::Command, sync::mpsc};
 
 use super::runner::{CommandError, CommandOutput, CommandRunner, OutputChunk};
@@ -70,15 +71,24 @@ impl CommandRunner for ShellCommandRunner {
         let mut cmd = Command::new(&self.shell);
         cmd.arg("-c").arg(command).stdin(Stdio::null());
 
-        let duration = start_time.elapsed();
+        let working_directory =
+            std::env::current_dir().unwrap_or_else(|_| Path::new(".").to_path_buf());
 
         // Execute the command within the context of a timeout
-        let output = tokio::time::timeout(
-            timeout,
-            cmd.output().map_err(|e| CommandError::from(Arc::new(e))),
-        )
-        .await
-        .map_err(|_| CommandError::Timeout(timeout))??;
+        let output = tokio::time::timeout(timeout, cmd.output())
+            .await
+            .map_err(|_| CommandError::Timeout {
+                command: command.to_string(),
+                timeout,
+                working_directory: working_directory.clone(),
+            })?
+            .map_err(|e| CommandError::IoError {
+                command: command.to_string(),
+                working_directory: working_directory.clone(),
+                source: Arc::new(e),
+            })?;
+
+        let duration = start_time.elapsed();
 
         Ok(CommandOutput { output, duration })
     }
@@ -103,7 +113,13 @@ impl CommandRunner for ShellCommandRunner {
 
         let mut child = match cmd.spawn() {
             Ok(child) => child,
-            Err(e) => return Err(CommandError::from(Arc::new(e))),
+            Err(e) => {
+                return Err(CommandError::IoError {
+                    command: command.to_string(),
+                    working_directory: Path::new(".").to_path_buf(),
+                    source: Arc::new(e),
+                });
+            }
         };
 
         let stdout = child
@@ -143,7 +159,12 @@ impl CommandRunner for ShellCommandRunner {
                         handle_chunked_read_result(result, &mut full_stderr, &mut stderr_buf, &tx, OutputChunk::Stderr).await?;
                     },
                     status = child.wait() => {
-                        let status = status.map_err(|e| CommandError::from(Arc::new(e)))?;
+                        let status = status.map_err(|e| CommandError::IoError {
+                            command: command.to_string(),
+                            working_directory: std::env::current_dir()
+                                .unwrap_or_else(|_| Path::new(".").to_path_buf()),
+                            source: Arc::new(e),
+                        })?;
                         let duration = start_time.elapsed();
 
                         return Ok(CommandOutput {
@@ -163,7 +184,12 @@ impl CommandRunner for ShellCommandRunner {
             result
         } else {
             let _ = child.kill().await;
-            Err(CommandError::Timeout(timeout))
+            Err(CommandError::Timeout {
+                command: command.to_string(),
+                timeout,
+                working_directory: std::env::current_dir()
+                    .unwrap_or_else(|_| Path::new(".").to_path_buf()),
+            })
         }
     }
 }
@@ -185,14 +211,22 @@ async fn handle_chunked_read_result(
                 .map_err(|e| CommandError::Callback(e.0))?;
             // Note: Don't clear the buffer here - tokio reuses it for the next read
         }
-        Err(e) => return Err(CommandError::IoError(Arc::new(e))),
+        Err(e) => {
+            return Err(CommandError::IoError {
+                command: "streaming command".to_string(),
+                working_directory: std::env::current_dir()
+                    .unwrap_or_else(|_| Path::new(".").to_path_buf()),
+                source: Arc::new(e),
+            });
+        }
     }
     Ok(())
 }
 
 #[cfg(test)]
-mod tests {
+mod original_tests {
     use super::*;
+    use std::path::PathBuf;
 
     // These tests will actually run commands on the system
     // They could be skipped in CI environments if necessary
@@ -239,7 +273,7 @@ mod tests {
         let result = runner
             .execute_with_timeout("sleep 1", Duration::from_millis(10))
             .await;
-        assert!(matches!(result, Err(CommandError::Timeout(_))));
+        assert!(matches!(result, Err(CommandError::Timeout { .. })));
     }
 
     // Error handling tests
@@ -255,7 +289,7 @@ mod tests {
         assert!(result.is_err());
         let error = result.unwrap_err();
         match error {
-            CommandError::Timeout(_) => {
+            CommandError::Timeout { .. } => {
                 // Expected timeout error
             }
             _ => panic!("Expected CommandError::Timeout, got: {error:?}"),
@@ -315,12 +349,25 @@ mod tests {
     #[tokio::test]
     async fn test_error_display_formatting() {
         // Test that our error types format correctly
-        let timeout_error = CommandError::Timeout(Duration::from_millis(100));
-        assert_eq!(timeout_error.to_string(), "Command timed out after 100ms");
+        let timeout_error = CommandError::Timeout {
+            command: "test-command".to_string(),
+            timeout: Duration::from_millis(100),
+            working_directory: PathBuf::from("/tmp"),
+        };
+        assert!(
+            timeout_error
+                .to_string()
+                .contains("Command timed out after 100ms")
+        );
+        assert!(timeout_error.to_string().contains("test-command"));
 
         let io_error = std::io::Error::other("test error");
-        let cmd_error = CommandError::IoError(Arc::new(io_error));
-        assert_eq!(cmd_error.to_string(), "IO Error: test error");
+        let cmd_error = CommandError::IoError {
+            command: "test-command".to_string(),
+            working_directory: PathBuf::from("/tmp"),
+            source: Arc::new(io_error),
+        };
+        assert!(cmd_error.to_string().contains("test-command"));
 
         let stdout_error = CommandError::StdoutSpawn("stdout issue".to_string());
         assert_eq!(

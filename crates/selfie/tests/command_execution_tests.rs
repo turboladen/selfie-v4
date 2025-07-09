@@ -98,7 +98,7 @@ async fn test_command_timeout() {
     // Should timeout
     assert!(matches!(
         result,
-        Err(selfie::commands::runner::CommandError::Timeout(_))
+        Err(selfie::commands::runner::CommandError::Timeout { .. })
     ));
 }
 
@@ -123,7 +123,7 @@ async fn test_command_streaming_timeout() {
     // Should timeout
     assert!(matches!(
         result,
-        Err(selfie::commands::runner::CommandError::Timeout(_))
+        Err(selfie::commands::runner::CommandError::Timeout { .. })
     ));
 }
 

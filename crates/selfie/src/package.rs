@@ -5,6 +5,9 @@ pub mod repository;
 pub mod service;
 pub mod validate;
 
+#[cfg(test)]
+mod tests;
+
 pub use self::builder::{EnvironmentConfigBuilder, PackageBuilder};
 
 // Core package entity and related types
@@ -124,7 +127,7 @@ impl Package {
 }
 
 #[cfg(test)]
-mod tests {
+mod package_tests {
     use builder::PackageBuilder;
 
     use super::*;
