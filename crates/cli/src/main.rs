@@ -21,11 +21,22 @@ use tracing::debug;
 
 use crate::{cli::ClapCli, commands::dispatch_command};
 
+fn init_tracing(verbose: bool) {
+    let level = if verbose {
+        tracing::Level::DEBUG
+    } else {
+        tracing::Level::WARN
+    };
+
+    tracing_subscriber::fmt().with_max_level(level).init();
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // tracing_subscriber::fmt::init();
-
     let args = ClapCli::parse();
+
+    // Initialize tracing based on verbose flag
+    init_tracing(args.verbose);
     debug!("CLI arguments: {:#?}", &args);
 
     let fs = RealFileSystem;
