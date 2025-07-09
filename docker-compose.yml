@@ -1,0 +1,45 @@
+services:
+  # Debian 12 (Bookworm) - .deb based with apt
+  debian:
+    build:
+      context: ./docker/debian
+      dockerfile: Dockerfile
+    container_name: selfie-debian
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - debian-cargo-cache:/usr/local/cargo
+      - ./target/debian:/workspace/target
+    environment:
+      - CARGO_HOME=/usr/local/cargo
+      - RUST_BACKTRACE=1
+    stdin_open: true
+    tty: true
+
+
+
+
+
+  # Alpine Linux - apk based
+  alpine:
+    build:
+      context: ./docker/alpine
+      dockerfile: Dockerfile
+    container_name: selfie-alpine
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - alpine-cargo-cache:/usr/local/cargo
+      - ./target/alpine:/workspace/target
+    environment:
+      - CARGO_HOME=/usr/local/cargo
+      - RUST_BACKTRACE=1
+    stdin_open: true
+    tty: true
+
+
+
+volumes:
+  # Separate cargo caches per distribution to avoid conflicts
+  debian-cargo-cache:
+  alpine-cargo-cache:
