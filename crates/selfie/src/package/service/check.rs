@@ -46,12 +46,12 @@ where
         config
     } else {
         use crate::package::port::PackageError;
-        let err = PackageError::EnvironmentNotFound {
+        let err = Box::new(PackageError::EnvironmentNotFound {
             package_name: package_name.to_string(),
             environment: current_env.to_string(),
             available_environments: package.environments().keys().cloned().collect(),
             package_file: package.path().clone(),
-        };
+        });
         let error_msg = format!("Environment configuration error: {err}");
         sender
             .send_error(PackageRepoError::PackageError(err), &error_msg)
@@ -76,12 +76,12 @@ where
             })
             .collect();
 
-        let err = PackageError::NoCheckCommand {
+        let err = Box::new(PackageError::NoCheckCommand {
             package_name: package_name.to_string(),
             environment: current_env.to_string(),
             package_file: package.path().clone(),
             other_envs_with_check,
-        };
+        });
 
         // Send structured result for no check command
         let check_result = CheckResultData {

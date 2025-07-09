@@ -36,7 +36,7 @@ pub trait PackageRepository: Send + Sync {
 #[derive(Error, Debug, Clone)]
 pub enum PackageRepoError {
     #[error(transparent)]
-    PackageError(#[from] PackageError),
+    PackageError(#[from] Box<PackageError>),
 
     #[error(transparent)]
     PackageListError(#[from] PackageListError),

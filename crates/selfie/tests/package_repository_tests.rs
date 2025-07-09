@@ -95,8 +95,7 @@ environments:
     // Should return an error about multiple packages
     assert!(matches!(
         result,
-        Err(selfie::package::port::PackageRepoError::PackageError(
-            PackageError::MultiplePackagesFound { .. }
-        ))
+        Err(selfie::package::port::PackageRepoError::PackageError(ref box_error))
+        if matches!(**box_error, PackageError::MultiplePackagesFound { .. })
     ));
 }

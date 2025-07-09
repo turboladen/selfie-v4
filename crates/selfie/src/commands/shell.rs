@@ -142,42 +142,58 @@ impl CommandRunner for ShellCommandRunner {
 
         let (tx, mut rx) = mpsc::channel(32);
 
-        // Spawn a task to handle the callback
-        tokio::spawn(async move {
-            while let Some(chunk) = rx.recv().await {
-                callback(chunk);
-            }
-        });
-
         let timeout_future = tokio::time::timeout(timeout, async {
+            let mut stdout_done = false;
+            let mut stderr_done = false;
+            let mut process_done = false;
+            let mut exit_status = None;
+
             loop {
                 tokio::select! {
-                    result = stdout.read(&mut stdout_buf) => {
-                        handle_chunked_read_result(result, &mut full_stdout, &mut stdout_buf, &tx, OutputChunk::Stdout).await?;
+                    result = stdout.read(&mut stdout_buf), if !stdout_done => {
+                        if handle_chunked_read_result(result, &mut full_stdout, &mut stdout_buf, &tx, OutputChunk::Stdout).await? {
+                            stdout_done = true;  // EOF reached
+                        }
                     },
-                    result = stderr.read(&mut stderr_buf) => {
-                        handle_chunked_read_result(result, &mut full_stderr, &mut stderr_buf, &tx, OutputChunk::Stderr).await?;
+                    result = stderr.read(&mut stderr_buf), if !stderr_done => {
+                        if handle_chunked_read_result(result, &mut full_stderr, &mut stderr_buf, &tx, OutputChunk::Stderr).await? {
+                            stderr_done = true;  // EOF reached
+                        }
                     },
-                    status = child.wait() => {
-                        let status = status.map_err(|e| CommandError::IoError {
+                    status = child.wait(), if !process_done => {
+                        exit_status = Some(status.map_err(|e| CommandError::IoError {
                             command: command.to_string(),
                             working_directory: std::env::current_dir()
                                 .unwrap_or_else(|_| Path::new(".").to_path_buf()),
                             source: Arc::new(e),
-                        })?;
-                        let duration = start_time.elapsed();
-
-                        return Ok(CommandOutput {
-                            output: Output {
-                                status,
-                                stdout: full_stdout,
-                                stderr: full_stderr,
-                            },
-                            duration,
-                        });
+                        })?);
+                        process_done = true;
                     }
                 }
+
+                // Exit when process is done AND both streams are done
+                if process_done && stdout_done && stderr_done {
+                    break;
+                }
             }
+
+            // Close the sender to signal no more chunks will be sent
+            drop(tx);
+
+            // Process all remaining chunks in the callback
+            while let Some(chunk) = rx.recv().await {
+                callback(chunk);
+            }
+
+            let duration = start_time.elapsed();
+            Ok(CommandOutput {
+                output: Output {
+                    status: exit_status.unwrap(),
+                    stdout: full_stdout,
+                    stderr: full_stderr,
+                },
+                duration,
+            })
         });
 
         if let Ok(result) = timeout_future.await {
@@ -200,9 +216,9 @@ async fn handle_chunked_read_result(
     buffer: &mut [u8],
     tx: &mpsc::Sender<OutputChunk>,
     output_type: fn(String) -> OutputChunk,
-) -> Result<(), CommandError> {
+) -> Result<bool, CommandError> {
     match result {
-        Ok(0) => {} // End of stream
+        Ok(0) => Ok(true), // End of stream
         Ok(n) => {
             full_output.extend_from_slice(&buffer[..n]);
             let chunk = String::from_utf8_lossy(&buffer[..n]).to_string();
@@ -210,17 +226,15 @@ async fn handle_chunked_read_result(
                 .await
                 .map_err(|e| CommandError::Callback(e.0))?;
             // Note: Don't clear the buffer here - tokio reuses it for the next read
+            Ok(false) // Continue reading
         }
-        Err(e) => {
-            return Err(CommandError::IoError {
-                command: "streaming command".to_string(),
-                working_directory: std::env::current_dir()
-                    .unwrap_or_else(|_| Path::new(".").to_path_buf()),
-                source: Arc::new(e),
-            });
-        }
+        Err(e) => Err(CommandError::IoError {
+            command: "streaming command".to_string(),
+            working_directory: std::env::current_dir()
+                .unwrap_or_else(|_| Path::new(".").to_path_buf()),
+            source: Arc::new(e),
+        }),
     }
-    Ok(())
 }
 
 #[cfg(test)]

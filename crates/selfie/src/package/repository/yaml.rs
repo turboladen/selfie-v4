@@ -65,7 +65,7 @@ impl<F: FileSystem> YamlPackageRepository<F> {
             *files_examined += 1;
 
             if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                if file_name == format!("{}.yml", name) || file_name == format!("{}.yaml", name) {
+                if file_name == format!("{name}.yml") || file_name == format!("{name}.yaml") {
                     matching_files.push(path);
                 }
             }
@@ -119,23 +119,23 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<F> {
             .map_err(|e| PackageRepoError::IoError(Arc::new(e)))?;
 
         if package_files.is_empty() {
-            return Err(PackageError::PackageNotFound {
+            return Err(Box::new(PackageError::PackageNotFound {
                 name: name.to_string(),
                 packages_path: self.package_dir.clone(),
                 files_examined,
                 search_patterns,
-            }
+            })
             .into());
         }
 
         if package_files.len() > 1 {
-            return Err(PackageError::MultiplePackagesFound {
+            return Err(Box::new(PackageError::MultiplePackagesFound {
                 name: name.to_string(),
                 packages_path: self.package_dir.clone(),
                 conflicting_paths: package_files,
                 files_examined,
                 search_patterns,
-            }
+            })
             .into());
         }
 
@@ -144,12 +144,14 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<F> {
 
         let package = self
             .load_package_from_file(package_file)
-            .map_err(|source| PackageError::ParseError {
-                name: name.to_string(),
-                packages_path: self.package_dir.clone(),
-                failed_file: package_file.clone(),
-                file_size_bytes: file_size,
-                source,
+            .map_err(|source| {
+                Box::new(PackageError::ParseError {
+                    name: name.to_string(),
+                    packages_path: self.package_dir.clone(),
+                    failed_file: package_file.clone(),
+                    file_size_bytes: file_size,
+                    source,
+                })
             })?;
 
         Ok(package)
@@ -261,9 +263,8 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(PackageRepoError::PackageError(
-                PackageError::PackageNotFound { .. }
-            ))
+            Err(PackageRepoError::PackageError(ref box_error))
+            if matches!(**box_error, PackageError::PackageNotFound { .. })
         ));
     }
 
@@ -315,9 +316,8 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(PackageRepoError::PackageError(
-                PackageError::MultiplePackagesFound { .. }
-            ))
+            Err(PackageRepoError::PackageError(ref box_error))
+            if matches!(**box_error, PackageError::MultiplePackagesFound { .. })
         ));
     }
 
@@ -550,25 +550,28 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            PackageRepoError::PackageError(PackageError::ParseError {
-                name,
-                packages_path,
-                source,
-                ..
-            }) => {
-                assert_eq!(name, "invalid");
-                assert_eq!(packages_path, package_dir);
-                match source {
-                    PackageParseError::YamlParse {
-                        package_path: error_path,
-                        ..
-                    } => {
-                        assert_eq!(error_path, package_path);
+            PackageRepoError::PackageError(box_error) => match *box_error {
+                PackageError::ParseError {
+                    name,
+                    packages_path,
+                    source,
+                    ..
+                } => {
+                    assert_eq!(name, "invalid");
+                    assert_eq!(packages_path, package_dir);
+                    match source {
+                        PackageParseError::YamlParse {
+                            package_path: error_path,
+                            ..
+                        } => {
+                            assert_eq!(error_path, package_path);
+                        }
+                        _ => panic!("Expected YamlParse error"),
                     }
-                    _ => panic!("Expected YamlParse error"),
                 }
-            }
-            _ => panic!("Expected ParseError"),
+                _ => panic!("Expected ParseError"),
+            },
+            _ => panic!("Expected PackageError"),
         }
     }
 
@@ -630,15 +633,18 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            PackageRepoError::PackageError(PackageError::MultiplePackagesFound {
-                name,
-                packages_path,
-                ..
-            }) => {
-                assert_eq!(name, "duplicate");
-                assert_eq!(packages_path, package_dir);
-            }
-            _ => panic!("Expected MultiplePackagesFound error"),
+            PackageRepoError::PackageError(box_error) => match *box_error {
+                PackageError::MultiplePackagesFound {
+                    name,
+                    packages_path,
+                    ..
+                } => {
+                    assert_eq!(name, "duplicate");
+                    assert_eq!(packages_path, package_dir);
+                }
+                _ => panic!("Expected MultiplePackagesFound error"),
+            },
+            _ => panic!("Expected PackageError"),
         }
     }
 

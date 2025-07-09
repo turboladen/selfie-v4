@@ -255,7 +255,7 @@ fn test_error_debug_output_includes_all_context() {
         search_patterns: vec!["test-multi.yml".to_string(), "test-multi.yaml".to_string()],
     };
 
-    let debug_output = format!("{:?}", error);
+    let debug_output = format!("{error:?}");
 
     // Verify that all context fields appear in debug output
     assert!(debug_output.contains("test-multi"));

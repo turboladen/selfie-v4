@@ -112,7 +112,7 @@ fn test_command_error_debug_output_includes_context() {
         working_directory: PathBuf::from("/debug/test"),
     };
 
-    let debug_output = format!("{:?}", error);
+    let debug_output = format!("{error:?}");
     assert!(debug_output.contains("debug-test-command"));
     assert!(debug_output.contains("30s"));
     assert!(debug_output.contains("/debug/test"));
@@ -149,7 +149,7 @@ fn test_command_errors_are_cloneable() {
     };
 
     let cloned_error = timeout_error.clone();
-    assert_eq!(format!("{}", timeout_error), format!("{}", cloned_error));
+    assert_eq!(format!("{timeout_error}"), format!("{cloned_error}"));
 }
 
 #[test]
