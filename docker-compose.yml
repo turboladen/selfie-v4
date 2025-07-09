@@ -35,7 +35,6 @@ services:
     stdin_open: true
     tty: true
 
-
 volumes:
   # Separate cargo caches per distribution to avoid conflicts
   debian-cargo-cache:

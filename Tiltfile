@@ -22,7 +22,7 @@ for distro in distributions:
     # Create a local resource to run tests in each container
     local_resource(
         distro + '-tests',
-        cmd='docker-compose exec -T ' + distro + ' bash -c "cd /workspace && cargo test --all"',
+        cmd='docker-compose exec -T ' + distro + ' bash -c "cd /workspace && cargo test --all --color=always"',
         deps=['./crates', './Cargo.toml', './Cargo.lock'],
         resource_deps=[distro],
         auto_init=False,

@@ -13,7 +13,6 @@ help:
     @echo "🦀 Selfie Multi-Distribution Testing"
     @echo "===================================="
     @echo ""
-    @echo "Available recipes:"
     @just --list
     @echo ""
     @echo "Distribution-specific recipes:"
@@ -73,7 +72,7 @@ tilt-down:
 [group('tilt')]
 tilt-ci:
     @echo "🤖 Running Tilt in CI mode..."
-    @tilt up --stream --hud=false
+    @tilt up --stream
 
 # Distribution-specific recipes
 [group('debian')]
@@ -139,7 +138,7 @@ rebuild-images:
 [group('local')]
 local-test:
     @echo "🧪 Running tests locally..."
-    @cargo test --all
+    @cargo test --all --color=always
 
 [group('local')]
 local-clippy:
@@ -176,10 +175,18 @@ check-deps:
 
 # CI/CD helpers
 [group('ci')]
-ci-test: tilt-ci
+ci-test:
     @echo "🤖 Running CI test suite..."
-    @tilt trigger test-all
-    @tilt down
+    @echo "🚀 Starting containers..."
+    @docker-compose up -d
+    @echo "⏳ Waiting for containers to be ready..."
+    @sleep 5
+    @echo "🧪 Running tests on Debian..."
+    @docker-compose exec -T debian bash -c "cd /workspace && cargo test --all --color=always"
+    @echo "🧪 Running tests on Alpine..."
+    @docker-compose exec -T alpine bash -c "cd /workspace && cargo test --all --color=always"
+    @echo "🛑 Stopping containers..."
+    @docker-compose down
 
 # Installation helpers
 [group('install')]
@@ -227,12 +234,12 @@ debug-images:
 [group('test')]
 test-streaming:
     @echo "🧪 Running streaming tests specifically..."
-    @cargo test test_command_streaming
+    @cargo test test_command_streaming --color=always
 
 [group('test')]
 test-integration:
     @echo "🧪 Running integration tests..."
-    @cargo test --test '*'
+    @cargo test --test '*' --color=always
 
 # Quick shortcuts
 alias t := test
