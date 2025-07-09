@@ -4,6 +4,7 @@ services:
     build:
       context: ./docker/debian
       dockerfile: Dockerfile
+    image: selfie-debian
     container_name: selfie-debian
     working_dir: /workspace
     volumes:
@@ -16,15 +17,12 @@ services:
     stdin_open: true
     tty: true
 
-
-
-
-
   # Alpine Linux - apk based
   alpine:
     build:
       context: ./docker/alpine
       dockerfile: Dockerfile
+    image: selfie-alpine
     container_name: selfie-alpine
     working_dir: /workspace
     volumes:
@@ -36,7 +34,6 @@ services:
       - RUST_BACKTRACE=1
     stdin_open: true
     tty: true
-
 
 
 volumes:

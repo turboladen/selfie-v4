@@ -11,20 +11,11 @@ distributions = [
 # Docker Compose configuration
 docker_compose('./docker-compose.yml')
 
-# Build Docker images for each distribution
-for distro in distributions:
-    docker_build(
-        'selfie-v4_' + distro,
-        context='./docker/' + distro,
-        dockerfile='./docker/' + distro + '/Dockerfile'
-    )
-
 # Create Tilt resources for each distribution
 for distro in distributions:
     # Configure docker-compose service with manual trigger
     dc_resource(
         distro,
-        resource_deps=['selfie-v4_' + distro],
         trigger_mode=TRIGGER_MODE_MANUAL
     )
 
@@ -52,9 +43,9 @@ local_resource(
 print("📦 Selfie Multi-Distribution Testing Setup")
 print("==========================================")
 print("")
-print("🐳 Building Docker images for distributions:")
+print("🐳 Docker Compose services for distributions:")
 for distro in distributions:
-    print("  • " + distro + " (selfie-v4_" + distro + ")")
+    print("  • " + distro + " (selfie-" + distro + ")")
 print("")
 print("Available distributions:")
 for distro in distributions:
@@ -74,5 +65,5 @@ print("")
 print("All resources are set to manual trigger mode to avoid overwhelming your system.")
 print("Use 'tilt trigger <resource-name>' to run specific tasks.")
 print("")
-print("💡 Images are built automatically when Dockerfiles change.")
+print("💡 Images are built by Docker Compose when Dockerfiles change.")
 print("🔄 Use 'tilt up' to start and 'tilt down' to stop the environment.")

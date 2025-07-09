@@ -221,7 +221,7 @@ debug-rust:
 [group('debug')]
 debug-images:
     @echo "🐳 Docker images:"
-    @docker images | grep -E "(selfie|debian|alpine)"
+    @docker images | grep selfie
 
 # Test specific functionality
 [group('test')]
