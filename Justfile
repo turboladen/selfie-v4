@@ -4,7 +4,7 @@
 # Variables
 distributions := "debian alpine"
 
-# Docker Compose operations
+#   🐳 docker - Direct Docker Compose operations
 mod docker 'justfiles/docker.just'
 # Tilt operations (requires Tilt running)
 mod tilt 'justfiles/tilt.just'

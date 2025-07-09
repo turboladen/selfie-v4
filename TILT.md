@@ -6,16 +6,18 @@ Docker Compose.
 ## Quick Start
 
 ```bash
+# Start containers
+just docker start
 # Start Tilt UI
-just verify
+tilt up
 # Open http://localhost:10350
 
 # Run tests on all distributions
-just test
+just tilt test
 
 # Test specific distribution
-just test-debian
-just test-alpine
+just tilt test-debian
+just tilt test-alpine
 ```
 
 ## Distributions
@@ -27,7 +29,7 @@ Perfect coverage of different package managers and libc variants.
 
 ## Using the Tilt UI
 
-1. **Start Tilt**: `just verify` or `tilt up`
+1. **Start containers**: `just docker start`, then **Start Tilt**: `tilt up`
 2. **Open UI**: http://localhost:10350
 3. **Run tests**: Click the trigger button for:
    - `test-all` - Run tests on all distributions
@@ -43,23 +45,24 @@ The Tilt UI provides visual feedback and real-time logs for all operations.
 ### Essential Commands
 
 ```bash
-just verify         # Start Tilt UI
-just test           # Run tests on all distributions
-just clean          # Clean up everything
+just docker start   # Start containers
+tilt up            # Start Tilt UI
+just tilt test     # Run tests on all distributions
+just docker clean  # Clean up everything
 ```
 
 ### Distribution-Specific Testing
 
 ```bash
-just test-debian    # Test only on Debian
-just test-alpine    # Test only on Alpine
+just tilt test-debian    # Test only on Debian
+just tilt test-alpine    # Test only on Alpine
 ```
 
 ### Container Access
 
 ```bash
-just shell-debian   # Open shell in Debian container
-just shell-alpine   # Open shell in Alpine container
+just docker shell-debian   # Open shell in Debian container
+just docker shell-alpine   # Open shell in Alpine container
 ```
 
 ### Local Development
@@ -67,16 +70,19 @@ just shell-alpine   # Open shell in Alpine container
 ```bash
 just local-test     # Run tests locally (not in containers)
 just local-clippy   # Run clippy locally
-just local-build    # Build locally
+just build          # Build locally
+just fmt            # Format code with dprint and cargo
+just docs           # Generate documentation
 ```
 
 ### Docker Management
 
 ```bash
-just start          # Start all containers
-just stop           # Stop all containers
-just status         # Show container status
-just build-images   # Build Docker images
+just docker start          # Start all containers
+just docker stop           # Stop all containers
+just docker status         # Show container status
+just docker build-images   # Build Docker images
+just docker logs           # Show container logs
 ```
 
 ## Running Selfie Commands in Containers
@@ -85,8 +91,8 @@ just build-images   # Build Docker images
 
 ```bash
 # Get a shell in any distribution
-just shell-debian
-just shell-alpine
+just docker shell-debian
+just docker shell-alpine
 
 # Inside the container, run selfie commands:
 cargo run -- package list
@@ -123,15 +129,15 @@ tilt trigger alpine-tests       # Run tests on Alpine
 
 ```bash
 # Make code changes, then:
-just test-debian    # Quick test on one distro
-just test           # Full test across all distros
+just tilt test-debian    # Quick test on one distro
+just tilt test           # Full test across all distros
 ```
 
 ### Debugging Test Failures
 
 ```bash
 # Get into the failing environment
-just shell-alpine
+just docker shell-alpine
 
 # Inside container:
 cargo test test_that_failed
@@ -186,16 +192,17 @@ selfie-v4/
 ### Container Issues
 
 ```bash
-just status                    # Check container status
-docker-compose logs debian     # View specific container logs
-docker-compose build          # Rebuild images if needed
+just docker status                    # Check container status
+just docker logs                     # View all container logs
+docker-compose logs debian           # View specific container logs
+just docker build-images             # Rebuild images if needed
 ```
 
 ### Clean Slate
 
 ```bash
-just clean                     # Remove all containers and volumes
-docker-compose build --no-cache  # Rebuild from scratch
+just docker clean                     # Remove all containers and volumes
+just docker rebuild-images           # Rebuild from scratch
 ```
 
 ### Tilt Issues
