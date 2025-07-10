@@ -3,7 +3,9 @@ use std::borrow::Cow;
 use crate::{
     commands::runner::CommandRunner,
     config::AppConfig,
-    package::{EnvironmentConfig, Package, event::EventSender, port::PackageRepository},
+    package::{
+        EnvironmentConfig, GetPackage, Package, event::EventSender, port::PackageRepository,
+    },
 };
 
 /// Step to fetch a package from the repository
@@ -12,7 +14,7 @@ pub async fn fetch_package<PR>(
     package_name: &str,
     sender: &EventSender,
     progress: &mut crate::package::service::ProgressTracker,
-) -> Result<Package, &'static str>
+) -> Result<GetPackage, &'static str>
 where
     PR: PackageRepository,
 {

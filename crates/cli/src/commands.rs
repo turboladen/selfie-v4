@@ -115,6 +115,9 @@ async fn dispatch_package_command(
         PackageSubcommands::Create { package_name } => {
             package::create::handle_create(package_name, config, reporter)
         }
+        PackageSubcommands::Edit { package_name } => {
+            package::edit::handle_edit(package_name, config, reporter).await
+        }
         PackageSubcommands::Validate { package_name } => {
             package::validate::handle_validate(package_name, config, reporter).await
         }

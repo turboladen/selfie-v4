@@ -171,6 +171,21 @@ pub(crate) enum PackageSubcommands {
         package_name: String,
     },
 
+    /// Edit a package definition file
+    ///
+    /// Opens an existing package definition file for editing, or creates a new one
+    /// if it doesn't exist. Uses the editor specified in the EDITOR environment
+    /// variable, with fallbacks to common editors like VS Code, vim, or nano.
+    ///
+    /// Example: `selfie package edit my-tool`
+    Edit {
+        /// Name of the package to edit or create
+        ///
+        /// If the package exists, it will be opened for editing.
+        /// If it doesn't exist, a new template will be created and opened.
+        package_name: String,
+    },
+
     /// Validate a package definition file
     ///
     /// Performs comprehensive validation of a package definition including

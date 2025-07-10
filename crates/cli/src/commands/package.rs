@@ -1,5 +1,6 @@
 pub(crate) mod check;
 pub(crate) mod create;
+pub(crate) mod edit;
 pub(crate) mod info;
 pub(crate) mod install;
 pub(crate) mod list;

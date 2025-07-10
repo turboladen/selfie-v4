@@ -11,7 +11,10 @@ use std::{
 };
 use thiserror::Error;
 
-use crate::package::Package;
+use crate::{
+    fs::filesystem::FileSystemError,
+    package::{GetPackage, Package},
+};
 
 /// Port for package repository operations (Hexagonal Architecture)
 ///
@@ -48,7 +51,7 @@ pub trait PackageRepository: Send + Sync {
     /// - Multiple packages with the same name are found
     /// - The package definition file is malformed
     /// - File system access fails
-    fn get_package(&self, name: &str) -> Result<Package, PackageRepoError>;
+    fn get_package(&self, name: &str) -> Result<GetPackage, PackageRepoError>;
 
     /// List all available packages in the package directory
     ///
@@ -93,9 +96,9 @@ pub trait PackageRepository: Send + Sync {
 
     /// Find package files that match the given name
     ///
-    /// Searches for package definition files (with various extensions like .yml, .yaml)
-    /// that correspond to the given package name. This is useful for package
-    /// discovery and resolving ambiguities when multiple files might match.
+    /// Searches for package definition files that correspond to the given
+    /// package name. This is useful for package discovery and resolving
+    /// ambiguities when multiple files might match.
     ///
     /// # Arguments
     ///
@@ -111,6 +114,29 @@ pub trait PackageRepository: Send + Sync {
     /// - The package directory cannot be accessed
     /// - File system operations fail
     fn find_package_files(&self, name: &str) -> Result<Vec<PathBuf>, PackageListError>;
+
+    /// Save a package to the specified file path
+    ///
+    /// Serializes the package and writes it to the given path. This method
+    /// handles all file system operations through the repository's abstraction
+    /// layer, enabling proper testing and mocking.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - The package to save
+    /// * `path` - The file path where the package should be saved
+    ///
+    /// # Returns
+    ///
+    /// Success if the package was saved successfully
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PackageRepoError`] if:
+    /// - The package cannot be serialized to YAML
+    /// - The target directory doesn't exist or isn't writable
+    /// - File system operations fail
+    fn save_package(&self, package: &Package, path: &Path) -> Result<(), PackageRepoError>;
 }
 
 /// Errors that can occur during package repository operations
@@ -131,6 +157,10 @@ pub enum PackageRepoError {
     /// IO error during repository operation
     #[error("IO error: {0}")]
     IoError(#[from] Arc<std::io::Error>),
+
+    /// File system error during repository operation
+    #[error("File system error: {0}")]
+    FileSystemError(#[from] FileSystemError),
 }
 
 /// Errors that can occur when listing packages

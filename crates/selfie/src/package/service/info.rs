@@ -28,7 +28,7 @@ where
     // Step 1: Fetch package
     progress.next(sender, "Loading package definition").await;
 
-    let package = match repo.get_package(package_name) {
+    let package_blob = match repo.get_package(package_name) {
         Ok(pkg) => {
             sender
                 .send_debug(format!("Successfully loaded package: {package_name}"))
@@ -46,11 +46,22 @@ where
     progress.next(sender, "Gathering package information").await;
 
     let package_info = PackageInfoData {
-        name: package.name().to_string(),
-        version: package.version().to_string(),
-        description: package.description().map(std::string::ToString::to_string),
-        homepage: package.homepage().map(std::string::ToString::to_string),
-        environments: package.environments().keys().cloned().collect(),
+        name: package_blob.package.name().to_string(),
+        version: package_blob.package.version().to_string(),
+        description: package_blob
+            .package
+            .description()
+            .map(std::string::ToString::to_string),
+        homepage: package_blob
+            .package
+            .homepage()
+            .map(std::string::ToString::to_string),
+        environments: package_blob
+            .package
+            .environments()
+            .keys()
+            .cloned()
+            .collect(),
         current_environment: config.environment().to_string(),
     };
 
@@ -62,7 +73,7 @@ where
         .await;
 
     // Sort environments to show current environment first
-    let mut environments: Vec<_> = package.environments().iter().collect();
+    let mut environments: Vec<_> = package_blob.package.environments().iter().collect();
     environments.sort_by(|a, b| {
         let a_is_current = a.0 == config.environment();
         let b_is_current = b.0 == config.environment();

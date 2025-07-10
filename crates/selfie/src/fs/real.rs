@@ -3,6 +3,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use etcetera::{AppStrategy, AppStrategyArgs, choose_app_strategy};
@@ -15,7 +16,16 @@ pub struct RealFileSystem;
 
 impl FileSystem for RealFileSystem {
     fn read_file(&self, path: &Path) -> Result<String, FileSystemError> {
-        Ok(fs::read_to_string(path)?)
+        fs::read_to_string(path).map_err(|e| FileSystemError::IoError(Arc::new(e)))
+    }
+
+    fn write_file(&self, path: &Path, data: &[u8]) -> Result<(), FileSystemError> {
+        // Create parent directories if they don't exist
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| FileSystemError::IoError(Arc::new(e)))?;
+        }
+        fs::write(path, data).map_err(|e| FileSystemError::IoError(Arc::new(e)))?;
+        Ok(())
     }
 
     fn path_exists(&self, path: &Path) -> bool {
@@ -26,15 +36,17 @@ impl FileSystem for RealFileSystem {
         let binding = path.to_string_lossy();
         let expanded = shellexpand::tilde(&binding);
 
-        Ok(PathBuf::from(expanded.as_ref()).canonicalize()?)
+        PathBuf::from(expanded.as_ref())
+            .canonicalize()
+            .map_err(|e| FileSystemError::IoError(Arc::new(e)))
     }
 
     fn list_directory(&self, path: &Path) -> Result<Vec<PathBuf>, FileSystemError> {
-        let entries = fs::read_dir(path)?;
+        let entries = fs::read_dir(path).map_err(|e| FileSystemError::IoError(Arc::new(e)))?;
 
         let mut paths = Vec::new();
         for entry in entries {
-            let entry = entry.map_err(FileSystemError::IoError)?;
+            let entry = entry.map_err(|e| FileSystemError::IoError(Arc::new(e)))?;
             paths.push(entry.path());
         }
 
@@ -42,7 +54,8 @@ impl FileSystem for RealFileSystem {
     }
 
     fn canonicalize(&self, path: &Path) -> Result<PathBuf, FileSystemError> {
-        Ok(path.canonicalize()?)
+        path.canonicalize()
+            .map_err(|e| FileSystemError::IoError(Arc::new(e)))
     }
 
     fn config_dir(&self) -> Result<PathBuf, FileSystemError> {
@@ -108,8 +121,6 @@ mod tests {
         assert!(paths.contains(&file2));
     }
 
-    // This would be added to the existing tests module in crates/libselfie/src/adapters/filesystem.rs
-
     #[test]
     fn test_read_file() {
         let fs = RealFileSystem;
@@ -130,6 +141,31 @@ mod tests {
         let non_existent = dir.path().join("non_existent.txt");
         let err = fs.read_file(&non_existent).unwrap_err();
         assert!(matches!(err, FileSystemError::IoError(_)));
+    }
+
+    #[test]
+    fn test_write_file() {
+        let fs = RealFileSystem;
+
+        // Create a temporary directory
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test_write.txt");
+
+        // Test writing to a file
+        let test_content = b"Hello, world!";
+        fs.write_file(&file_path, test_content).unwrap();
+
+        // Verify the file was written correctly
+        let content = std::fs::read(&file_path).unwrap();
+        assert_eq!(content, test_content);
+
+        // Test writing to a file in a nested directory that doesn't exist
+        let nested_path = dir.path().join("nested").join("dir").join("test.txt");
+        fs.write_file(&nested_path, test_content).unwrap();
+
+        // Verify the file was written and directories were created
+        let nested_content = std::fs::read(&nested_path).unwrap();
+        assert_eq!(nested_content, test_content);
     }
 
     #[test]
@@ -273,7 +309,7 @@ mod tests {
     #[test]
     fn test_filesystem_error_display() {
         let io_error = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Access denied");
-        let fs_error = FileSystemError::IoError(io_error);
+        let fs_error = FileSystemError::IoError(Arc::new(io_error));
 
         assert_eq!(fs_error.to_string(), "IO error: Access denied");
 
@@ -284,7 +320,7 @@ mod tests {
     #[test]
     fn test_filesystem_error_from_io_error() {
         let io_error = std::io::Error::other("test error");
-        let fs_error = FileSystemError::from(io_error);
+        let fs_error = FileSystemError::IoError(Arc::new(io_error));
 
         match fs_error {
             FileSystemError::IoError(inner) => {

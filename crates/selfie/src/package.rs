@@ -12,6 +12,59 @@ use std::{collections::HashMap, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+/// Package data for editing operations
+///
+/// Contains a package and its file metadata for editing workflows.
+/// Can represent either an existing package loaded from the repository
+/// or a new package template ready for creation.
+#[derive(Debug, Clone)]
+pub struct GetPackage {
+    /// The package content (either loaded or template)
+    pub package: Package,
+    /// The file path where the package is/should be stored
+    pub file_path: PathBuf,
+    /// Whether this is a new package (true) or existing (false)
+    pub is_new: bool,
+}
+
+impl GetPackage {
+    /// Create a new package template for the given name and directory
+    ///
+    /// This creates a basic package template with minimal configuration
+    /// that can be used as a starting point for new packages.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The package name
+    /// * `packages_directory` - The directory where package files are stored
+    pub fn new(name: &str, packages_directory: &std::path::Path) -> Self {
+        let file_path = packages_directory.join(format!("{}.yml", name));
+        let package = Package::new_template(name);
+
+        Self {
+            package,
+            file_path,
+            is_new: true,
+        }
+    }
+
+    /// Create a GetPackage from an existing package and file path
+    ///
+    /// This is used when loading existing packages from the repository.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - The loaded package
+    /// * `file_path` - The path where the package file is stored
+    pub fn from_existing(package: Package, file_path: PathBuf) -> Self {
+        Self {
+            package,
+            file_path,
+            is_new: false,
+        }
+    }
+}
+
 /// Core package entity representing a package definition
 ///
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -89,6 +142,36 @@ impl Package {
             description,
             environments,
             path,
+        }
+    }
+
+    /// Create a basic package template
+    ///
+    /// Creates a minimal package template suitable for new packages.
+    /// The template includes basic metadata and a placeholder environment.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The package name
+    #[must_use]
+    pub fn new_template(name: &str) -> Self {
+        let mut environments = HashMap::new();
+        environments.insert(
+            "default".to_string(),
+            EnvironmentConfig {
+                install: format!("# TODO: Add install command for {}", name),
+                check: Some(format!("# TODO: Add check command for {}", name)),
+                dependencies: Vec::new(),
+            },
+        );
+
+        Self {
+            name: name.to_string(),
+            version: "0.1.0".to_string(),
+            homepage: None,
+            description: Some(format!("Package definition for {}", name)),
+            environments,
+            path: PathBuf::new(), // Will be set by GetPackage::new
         }
     }
 

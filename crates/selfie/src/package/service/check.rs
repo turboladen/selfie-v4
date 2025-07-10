@@ -24,7 +24,7 @@ where
     progress.next(sender, "Loading package definition").await;
 
     // Step 1: Load package from repository
-    let package = match repo.get_package(package_name) {
+    let package_blob = match repo.get_package(package_name) {
         Ok(pkg) => {
             sender
                 .send_debug(format!("Successfully loaded package: {package_name}"))
@@ -42,15 +42,20 @@ where
 
     // Step 2: Get environment-specific check command with rich error context
     let current_env = config.environment();
-    let env_config = if let Some(config) = package.environments().get(current_env) {
+    let env_config = if let Some(config) = package_blob.package.environments().get(current_env) {
         config
     } else {
         use crate::package::port::PackageError;
         let err = Box::new(PackageError::EnvironmentNotFound {
             package_name: package_name.to_string(),
             environment: current_env.to_string(),
-            available_environments: package.environments().keys().cloned().collect(),
-            package_file: package.path().clone(),
+            available_environments: package_blob
+                .package
+                .environments()
+                .keys()
+                .cloned()
+                .collect(),
+            package_file: package_blob.package.path().clone(),
         });
         let error_msg = format!("Environment configuration error: {err}");
         sender
@@ -64,7 +69,8 @@ where
     } else {
         use crate::package::port::PackageError;
         // Find other environments that do have check commands
-        let other_envs_with_check: Vec<String> = package
+        let other_envs_with_check: Vec<String> = package_blob
+            .package
             .environments()
             .iter()
             .filter_map(|(env_name, env_config)| {
@@ -79,7 +85,7 @@ where
         let err = Box::new(PackageError::NoCheckCommand {
             package_name: package_name.to_string(),
             environment: current_env.to_string(),
-            package_file: package.path().clone(),
+            package_file: package_blob.package.path().clone(),
             other_envs_with_check,
         });
 

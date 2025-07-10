@@ -1,5 +1,8 @@
 use std::path::PathBuf;
 
+#[cfg(test)]
+use std::sync::Arc;
+
 use config::FileFormat;
 
 use crate::{config::AppConfig, fs::FileSystem};
@@ -479,10 +482,10 @@ mod tests {
             fs.expect_read_file()
                 .with(mockall::predicate::eq(config_path.clone()))
                 .return_once(|_| {
-                    Err(FileSystemError::IoError(std::io::Error::new(
+                    Err(FileSystemError::IoError(Arc::new(std::io::Error::new(
                         std::io::ErrorKind::PermissionDenied,
                         "Permission denied",
-                    )))
+                    ))))
                 });
 
             let loader = YamlLoader::new(&fs);

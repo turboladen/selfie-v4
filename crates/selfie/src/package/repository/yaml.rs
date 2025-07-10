@@ -6,7 +6,7 @@ use std::{
 use crate::{
     fs::FileSystem,
     package::{
-        Package,
+        GetPackage, Package,
         port::{
             ListPackagesOutput, PackageError, PackageListError, PackageParseError,
             PackageRepoError, PackageRepository,
@@ -103,7 +103,7 @@ impl<F: FileSystem> YamlPackageRepository<F> {
 }
 
 impl<F: FileSystem> PackageRepository for YamlPackageRepository<F> {
-    fn get_package(&self, name: &str) -> Result<Package, PackageRepoError> {
+    fn get_package(&self, name: &str) -> Result<GetPackage, PackageRepoError> {
         // Check if package directory exists first
         if !self.fs.path_exists(&self.package_dir) {
             return Err(PackageRepoError::PackageListError(
@@ -154,7 +154,7 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<F> {
                 })
             })?;
 
-        Ok(package)
+        Ok(GetPackage::from_existing(package, package_file.clone()))
     }
 
     fn list_packages(&self) -> Result<ListPackagesOutput, PackageListError> {
@@ -198,6 +198,21 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<F> {
 
         Ok(result)
     }
+
+    fn save_package(&self, package: &Package, path: &Path) -> Result<(), PackageRepoError> {
+        // Serialize the package to YAML
+        let yaml_content = serde_yaml::to_string(package).map_err(|e| {
+            PackageRepoError::IoError(Arc::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Failed to serialize package to YAML: {}", e),
+            )))
+        })?;
+
+        // Write the YAML content to the specified path
+        self.fs.write_file(path, yaml_content.as_bytes())?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -238,9 +253,9 @@ mod tests {
         let repo = YamlPackageRepository::new(fs, package_dir.clone());
         let package = repo.get_package("ripgrep").unwrap();
 
-        assert_eq!(package.name, "ripgrep");
-        assert_eq!(package.version, "0.1.0");
-        assert_eq!(package.environments.len(), 1);
+        assert_eq!(package.package.name, "ripgrep");
+        assert_eq!(package.package.version, "0.1.0");
+        assert_eq!(package.package.environments.len(), 1);
     }
 
     #[test]
