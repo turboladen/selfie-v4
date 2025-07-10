@@ -82,10 +82,11 @@ command_timeout: 30
 }
 
 #[test]
+#[ignore]
 fn test_config_permission_denied_error() {
     // This test is tricky to implement reliably across platforms
     // We'll skip it for now as it requires special setup
-    // TODO: Implement with proper permission manipulation
+    todo!("Implement with proper permission manipulation");
 }
 
 // =============================================================================
@@ -390,11 +391,12 @@ fn test_duplicate_package_names_error() {
 // =============================================================================
 
 #[test]
+#[ignore = "hard to do"]
 fn test_graceful_interruption_handling() {
     // This test would require spawning the process and sending signals
     // It's complex to implement reliably in integration tests
     // For now, we'll document it as a manual test case
-    // TODO: Implement with proper process control
+    todo!("Implement with proper process control");
 }
 
 // =============================================================================
@@ -594,6 +596,3 @@ environments:
         .success()
         .stdout(predicate::str::contains("working-package"));
 }
-
-// This test file provides comprehensive integration test coverage for all major error handling
-// scenarios in the selfie CLI application. Total: 28 comprehensive CLI error handling integration tests.

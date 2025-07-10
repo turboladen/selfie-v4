@@ -338,7 +338,7 @@ async fn handle_chunked_read_result(
 }
 
 #[cfg(test)]
-mod original_tests {
+mod tests {
     use super::*;
     use std::path::PathBuf;
 
