@@ -76,11 +76,11 @@ pub struct Package {
     pub(crate) version: String,
 
     /// Optional homepage URL
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) homepage: Option<String>,
 
     /// Optional package description
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) description: Option<String>,
 
     /// Map of environment configurations
@@ -99,7 +99,7 @@ pub struct EnvironmentConfig {
     pub(crate) install: String,
 
     /// Optional command to check if the package is already installed
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) check: Option<String>,
 
     /// Dependencies that must be installed before this package
@@ -108,6 +108,16 @@ pub struct EnvironmentConfig {
 }
 
 impl EnvironmentConfig {
+    /// Create a new environment configuration
+    #[must_use]
+    pub fn new(install: String, check: Option<String>, dependencies: Vec<String>) -> Self {
+        Self {
+            install,
+            check,
+            dependencies,
+        }
+    }
+
     #[must_use]
     pub fn install(&self) -> &str {
         &self.install
@@ -169,7 +179,7 @@ impl Package {
             name: name.to_string(),
             version: "0.1.0".to_string(),
             homepage: None,
-            description: Some(format!("Package definition for {}", name)),
+            description: None,
             environments,
             path: PathBuf::new(), // Will be set by GetPackage::new
         }

@@ -169,6 +169,13 @@ pub(crate) enum PackageSubcommands {
         /// This will be used as the filename for the package definition.
         /// The package name should be unique within the package directory.
         package_name: String,
+
+        /// Enable interactive mode for package creation
+        ///
+        /// Walks through prompts to configure package details like version,
+        /// description, environments, and dependencies interactively.
+        #[arg(short, long)]
+        interactive: bool,
     },
 
     /// Edit a package definition file
