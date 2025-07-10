@@ -1,102 +1,215 @@
+//! Command-line interface definitions and argument parsing
+//!
+//! This module defines the CLI structure using the clap crate for argument parsing.
+//! It provides a hierarchical command structure with global options and subcommands
+//! for different package management operations.
+//!
+//! # Structure
+//!
+//! The CLI follows a nested command pattern:
+//! - Global options (environment, verbosity, etc.)
+//! - Top-level commands (package, config)
+//! - Subcommands (install, check, list, etc.)
+//!
+//! # Examples
+//!
+//! ```bash
+//! selfie --environment=macos package install node
+//! selfie --verbose config validate
+//! selfie package list
+//! ```
+
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
-/// Selfie - A personal package manager
+/// Main CLI structure for the selfie package manager
 ///
+/// Defines the top-level command-line interface including global options
+/// that can be used with any subcommand. Global options override values
+/// from the configuration file when provided.
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 pub struct ClapCli {
-    /// Override the environment from config
+    /// Override the target environment from configuration file
     ///
+    /// Specifies which environment configuration to use for package operations.
+    /// This overrides the environment setting in the config file.
+    ///
+    /// Example: --environment=macos, --environment=linux
     #[clap(long, short = 'e', global = true)]
     pub(crate) environment: Option<String>,
 
-    /// Override the package directory from config
+    /// Override the package directory from configuration file
     ///
+    /// Specifies the directory where package definition files are located.
+    /// This overrides the package_directory setting in the config file.
+    ///
+    /// Example: --package-directory=/path/to/packages
     #[clap(long, short = 'p', global = true)]
     pub(crate) package_directory: Option<PathBuf>,
 
-    /// Show detailed output
+    /// Enable verbose output for debugging and detailed information
     ///
+    /// Shows additional debug information including command execution details,
+    /// configuration loading process, and internal operation steps.
     #[clap(long, short = 'v', global = true, default_value_t = false)]
     pub(crate) verbose: bool,
 
-    /// Enable colored output
+    /// Disable colored output in terminal
     ///
+    /// Forces plain text output without ANSI color codes. Useful for
+    /// scripts, CI environments, or terminals that don't support colors.
     #[clap(long, global = true, default_value_t = false)]
     pub(crate) no_color: bool,
 
-    /// Subcommand to execute
-    ///
+    /// The main command to execute
     #[clap(subcommand)]
     pub(crate) command: ClapCommands,
 }
 
-// Clap-specific command structure definitions here...
+/// Top-level commands available in the selfie CLI
+///
+/// The CLI is organized into main command categories that group related
+/// operations together. Each command category has its own subcommands
+/// and specific options.
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum ClapCommands {
-    /// Selfie: package management commands
+    /// Package management operations
     ///
+    /// Commands for installing, checking, listing, and managing packages.
+    /// This is the primary interface for package operations.
     Package(PackageCommands),
 
-    /// Selfie: configuration management commands
+    /// Configuration management operations
     ///
+    /// Commands for validating and managing the selfie configuration file.
+    /// These operations work with the application settings and validation.
     Config(ConfigCommands),
 }
 
+/// Package command group container
+///
+/// This structure holds the package-related subcommands. It serves as
+/// an organizational container for all package management operations.
 #[derive(Args, Debug, Clone)]
 pub(crate) struct PackageCommands {
+    /// The specific package operation to perform
     #[clap(subcommand)]
     pub(crate) command: PackageSubcommands,
 }
 
+/// Specific package management operations
+///
+/// These subcommands provide the core package management functionality
+/// including installation, checking, validation, and information retrieval.
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum PackageSubcommands {
-    /// Run a package's `install` command
+    /// Install a package using its configured installation method
     ///
+    /// Executes the package's installation command for the current environment.
+    /// If the package is already installed (based on its check command), the
+    /// installation may be skipped unless forced.
+    ///
+    /// Example: `selfie package install node`
     Install {
         /// Name of the package to install
-        package_name: String,
-    },
-
-    /// Run a package's `check` command
-    Check {
-        /// Name of the package to check
         ///
+        /// Must correspond to a package definition file in the package directory.
+        /// The package name should match the filename (without extension).
         package_name: String,
     },
 
-    /// List available packages
+    /// Check if a package is already installed
+    ///
+    /// Runs the package's configured check command to determine if it's
+    /// already installed in the current environment. This is useful for
+    /// verification and before attempting installation.
+    ///
+    /// Example: `selfie package check node`
+    Check {
+        /// Name of the package to check for installation
+        ///
+        /// Must correspond to a package definition file in the package directory.
+        package_name: String,
+    },
+
+    /// List all available packages in the package directory
+    ///
+    /// Discovers and displays all package definition files, showing basic
+    /// information about each package including name, version, and description.
+    ///
+    /// Example: `selfie package list`
     List,
 
-    /// Show information about a package
+    /// Show detailed information about a package
+    ///
+    /// Displays comprehensive information about a package including its
+    /// configuration, available environments, dependencies, and current
+    /// installation status.
+    ///
+    /// Example: `selfie package info node`
     Info {
         /// Name of the package to get information about
+        ///
+        /// Must correspond to a package definition file in the package directory.
         package_name: String,
     },
 
-    /// Create a new package
+    /// Create a new package definition file
+    ///
+    /// Creates a new package definition file with a basic template structure
+    /// in the package directory. This provides a starting point for defining
+    /// custom packages.
+    ///
+    /// Example: `selfie package create my-tool`
     Create {
-        /// Name of the package to create
+        /// Name of the new package to create
+        ///
+        /// This will be used as the filename for the package definition.
+        /// The package name should be unique within the package directory.
         package_name: String,
     },
 
-    /// Validate a package
+    /// Validate a package definition file
+    ///
+    /// Performs comprehensive validation of a package definition including
+    /// schema validation, environment configuration checks, and command
+    /// syntax verification.
+    ///
+    /// Example: `selfie package validate node`
     Validate {
         /// Name of the package to validate
+        ///
+        /// Must correspond to a package definition file in the package directory.
         package_name: String,
     },
 }
 
+/// Configuration command group container
+///
+/// This structure holds the configuration-related subcommands. It serves as
+/// an organizational container for all configuration management operations.
 #[derive(Args, Debug, Clone)]
 pub(crate) struct ConfigCommands {
+    /// The specific configuration operation to perform
     #[clap(subcommand)]
     pub(crate) command: ConfigSubcommands,
 }
 
+/// Configuration management operations
+///
+/// These subcommands provide functionality for managing and validating
+/// the selfie application configuration.
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum ConfigSubcommands {
-    /// Validate the selfie configuration
+    /// Validate the selfie configuration file
+    ///
+    /// Performs comprehensive validation of the configuration file including
+    /// schema validation, path verification, and environment setting checks.
+    /// This helps ensure the configuration is valid before using it for
+    /// package operations.
+    ///
+    /// Example: `selfie config validate`
     Validate,
 }

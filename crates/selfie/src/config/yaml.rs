@@ -6,17 +6,42 @@ use crate::{config::AppConfig, fs::FileSystem};
 
 use super::loader::{ConfigLoadError, ConfigLoader};
 
+/// YAML-based configuration loader implementation
+///
+/// Loads application configuration from YAML files in standard locations.
+/// Supports both `.yaml` and `.yml` file extensions and handles path expansion.
 pub struct YamlLoader<'a, F: FileSystem> {
+    /// File system abstraction for reading files and paths
     fs: &'a F,
 }
 
 impl<'a, F: FileSystem> YamlLoader<'a, F> {
+    /// Create a new YAML configuration loader
+    ///
+    /// # Arguments
+    ///
+    /// * `fs` - File system abstraction for reading configuration files
+    #[must_use]
     pub fn new(fs: &'a F) -> Self {
         Self { fs }
     }
 }
 
 impl<F: FileSystem> ConfigLoader for YamlLoader<'_, F> {
+    /// Load configuration from YAML files in standard locations
+    ///
+    /// Searches for `config.yaml` or `config.yml` in the user's configuration directory
+    /// and loads the first one found. Performs path expansion for the package directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigLoadError`] if:
+    /// - No configuration file is found in standard locations
+    /// - Multiple configuration files are found (both .yaml and .yml)
+    /// - File system access fails
+    /// - YAML content is malformed or invalid
+    /// - Required configuration fields are missing
+    /// - Configuration field types are incorrect
     fn load_config(&self) -> Result<AppConfig, ConfigLoadError> {
         let config_paths = match self.find_config_file_paths() {
             Ok(paths) => paths,
@@ -65,6 +90,16 @@ impl<F: FileSystem> ConfigLoader for YamlLoader<'_, F> {
         Ok(app_config)
     }
 
+    /// Find configuration file paths in standard locations
+    ///
+    /// Searches for both `config.yaml` and `config.yml` in the user's configuration
+    /// directory. Returns all found configuration files.
+    ///
+    /// # Errors
+    ///
+    /// Returns the searched directory path if:
+    /// - The user's configuration directory cannot be determined
+    /// - No configuration files are found in the search location
     fn find_config_file_paths(&self) -> Result<Vec<PathBuf>, PathBuf> {
         let mut paths = Vec::new();
 

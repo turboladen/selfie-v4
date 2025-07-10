@@ -1,21 +1,67 @@
+//! CLI configuration integration and command-line argument processing
+//!
+//! This module provides the integration between command-line arguments and the
+//! application configuration system. It implements the `ApplyToConfg` trait to
+//! allow CLI arguments to override configuration file settings.
+//!
+//! # Configuration Precedence
+//!
+//! The configuration system follows a standard precedence order:
+//! 1. Command-line arguments (highest priority)
+//! 2. Configuration file settings
+//! 3. Default values (lowest priority)
+//!
+//! # Examples
+//!
+//! ```bash
+//! # Override environment from config file
+//! selfie --environment=production package install node
+//!
+//! # Override package directory and enable verbose output
+//! selfie --package-directory=/custom/path --verbose package list
+//! ```
+
 use selfie::config::{AppConfig, loader::ApplyToConfg};
 
 use crate::cli::ClapCli;
 
 impl ApplyToConfg for ClapCli {
+    /// Apply command-line arguments to the base configuration
+    ///
+    /// Takes a base configuration (typically loaded from a file) and applies
+    /// any CLI arguments that were provided at runtime. CLI arguments override
+    /// corresponding values in the base configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The base configuration to modify
+    ///
+    /// # Returns
+    ///
+    /// A new [`AppConfig`] with CLI arguments applied on top of the base configuration
+    ///
+    /// # Configuration Overrides
+    ///
+    /// The following CLI arguments can override configuration file settings:
+    /// - `--environment`: Overrides the target environment
+    /// - `--package-directory`: Overrides the package directory path
+    /// - `--verbose`: Overrides the verbosity setting
+    /// - `--no-color`: Disables colored output (overrides use_colors setting)
     fn apply_to_config(&self, mut config: AppConfig) -> AppConfig {
-        // Override environment if specified
+        // Override environment if specified via CLI
         if let Some(env) = self.environment.as_ref() {
             config.environment_mut().clone_from(env);
         }
 
-        // Override package directory if specified
+        // Override package directory if specified via CLI
         if let Some(dir) = self.package_directory.as_ref() {
             config.package_directory_mut().clone_from(dir);
         }
 
-        // Apply UI settings
+        // Apply UI settings from CLI arguments
+        // Note: verbose flag directly sets the value
         *config.verbose_mut() = self.verbose;
+        // Note: no_color flag inverts the use_colors setting
         *config.use_colors_mut() = !self.no_color;
 
         config
@@ -29,7 +75,10 @@ mod tests {
     use selfie::config::AppConfigBuilder;
     use std::path::PathBuf;
 
-    // Helper to create CLI args
+    /// Helper structure to create CLI arguments for testing
+    ///
+    /// This provides a convenient way to construct CLI arguments without
+    /// having to deal with the complexity of clap's argument parsing in tests.
     struct FakeArgs {
         environment: Option<&'static str>,
         package_directory: Option<&'static str>,
@@ -38,6 +87,11 @@ mod tests {
     }
 
     impl FakeArgs {
+        /// Convert test arguments into a parsed CLI structure
+        ///
+        /// Constructs the command-line arguments as if they were passed to the
+        /// real CLI and parses them using clap. This ensures our tests exercise
+        /// the same parsing logic as the real application.
         fn into_cli(self) -> ClapCli {
             let mut args = vec!["selfie"];
 

@@ -1,4 +1,8 @@
-// Shell command runner adapter implementation
+//! Shell command runner adapter implementation
+//!
+//! This module provides a concrete implementation of the CommandRunner trait
+//! that executes commands through a system shell. It supports both blocking
+//! and streaming execution modes with configurable timeouts.
 
 use std::{
     path::Path,
@@ -15,20 +19,34 @@ use super::runner::{CommandError, CommandOutput, CommandRunner, OutputChunk};
 
 /// Shell command runner implementation
 ///
+/// Executes commands using a system shell (e.g., `/bin/sh`, `/bin/bash`).
+/// Provides both simple execution and streaming output capabilities with
+/// configurable timeouts and working directory support.
 #[derive(Clone, Debug)]
 pub struct ShellCommandRunner {
-    /// Path to the shell executable
-    ///
+    /// Path to the shell executable to use for command execution
     shell: String,
 
-    /// Default timeout for commands
-    ///
+    /// Default timeout for commands when no explicit timeout is provided
     default_timeout: Duration,
 }
 
 impl ShellCommandRunner {
     /// Create a new shell command runner
     ///
+    /// # Arguments
+    ///
+    /// * `shell` - Path to the shell executable (e.g., "/bin/sh", "/bin/bash")
+    /// * `default_timeout` - Default timeout for command execution
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use selfie::commands::ShellCommandRunner;
+    ///
+    /// let runner = ShellCommandRunner::new("/bin/sh", Duration::from_secs(30));
+    /// ```
     #[must_use]
     pub fn new(shell: &str, default_timeout: Duration) -> Self {
         Self {
@@ -40,8 +58,19 @@ impl ShellCommandRunner {
 
 #[async_trait]
 impl CommandRunner for ShellCommandRunner {
-    /// Checks if `command` is available.
+    /// Check if a command is available in the current environment
     ///
+    /// Uses the shell's `command -v` to test if the specified command
+    /// can be found in the current PATH. This is shell-agnostic and
+    /// works across different Unix-like systems.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The command name to check (e.g., "npm", "git", "python")
+    ///
+    /// # Returns
+    ///
+    /// `true` if the command is available, `false` otherwise
     async fn is_command_available(&self, command: &str) -> bool {
         // Shell-agnostic way to check if a command exists
         let check_cmd = format!("command -v {command} >/dev/null 2>&1");
@@ -52,15 +81,43 @@ impl CommandRunner for ShellCommandRunner {
         }
     }
 
-    /// Execute a command using the default timeout.
+    /// Execute a command using the default timeout
     ///
+    /// Runs the specified shell command and waits for completion, using
+    /// the default timeout configured for this runner instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The shell command to execute
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CommandError`] if:
+    /// - The command cannot be started (IO error)
+    /// - The command times out (exceeds default timeout)
+    /// - Any other execution error occurs
     async fn execute(&self, command: &str) -> Result<CommandOutput, CommandError> {
         self.execute_with_timeout(command, self.default_timeout)
             .await
     }
 
-    /// Execute a command without streaming stdout and stderr.
+    /// Execute a command with a specific timeout
     ///
+    /// Runs the specified shell command and waits for completion within
+    /// the given timeout duration. The command will be terminated if it
+    /// doesn't complete in time.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The shell command to execute
+    /// * `timeout` - Maximum duration to wait for completion
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CommandError`] if:
+    /// - The command cannot be started (IO error)
+    /// - The command times out before completion
+    /// - The shell returns an error executing the command
     async fn execute_with_timeout(
         &self,
         command: &str,
@@ -93,6 +150,26 @@ impl CommandRunner for ShellCommandRunner {
         Ok(CommandOutput { output, duration })
     }
 
+    /// Execute a command with streaming output processing
+    ///
+    /// Runs the command and streams stdout/stderr output through the provided
+    /// callback as it becomes available. This allows real-time processing of
+    /// command output, which is useful for long-running commands or when
+    /// providing user feedback.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The shell command to execute
+    /// * `timeout` - Maximum duration to wait for completion
+    /// * `callback` - Function called with each chunk of output
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CommandError`] if:
+    /// - The command cannot be started (IO error)
+    /// - The command times out before completion
+    /// - Output stream handling fails
+    /// - The callback function encounters an error
     async fn execute_streaming<F>(
         &self,
         command: &str,
@@ -210,6 +287,29 @@ impl CommandRunner for ShellCommandRunner {
     }
 }
 
+/// Handle the result of reading a chunk from stdout or stderr
+///
+/// Processes the result of an async read operation, updating the full output
+/// buffer and sending chunks to the callback. Returns whether the stream
+/// has reached EOF.
+///
+/// # Arguments
+///
+/// * `result` - Result of the read operation
+/// * `full_output` - Buffer to accumulate complete output
+/// * `buffer` - Read buffer containing the latest chunk
+/// * `tx` - Channel sender for streaming chunks to callback
+/// * `output_type` - Function to wrap chunks as stdout or stderr
+///
+/// # Returns
+///
+/// Returns `Ok(true)` if EOF reached, `Ok(false)` to continue reading
+///
+/// # Errors
+///
+/// Returns [`CommandError`] if:
+/// - The read operation failed (IO error)
+/// - The channel send operation failed
 async fn handle_chunked_read_result(
     result: Result<usize, tokio::io::Error>,
     full_output: &mut Vec<u8>,
