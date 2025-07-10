@@ -24,5 +24,5 @@ fn test_package_install() {
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Installing package"));
+        .stdout(predicate::str::contains("will be installed in"));
 }

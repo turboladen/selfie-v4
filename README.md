@@ -50,4 +50,3 @@ your current environment is `macos`, then Selfie will:
 
 As a note, you can also run `selfie package check ripgrep` to simply execute
 `environments.macos.check`.
-

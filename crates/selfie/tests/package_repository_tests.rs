@@ -49,7 +49,7 @@ environments:
     File::create(&not_a_package_path).unwrap();
     File::create(&readme_path).unwrap();
 
-    let repo = YamlPackageRepository::new(RealFileSystem, &package_dir);
+    let repo = YamlPackageRepository::new(RealFileSystem, package_dir.clone());
     let result = repo.list_packages().unwrap();
 
     // Should find exactly two valid packages
@@ -89,14 +89,13 @@ environments:
     let mut file = File::create(&duplicate_yml_path).unwrap();
     file.write_all(duplicate_yaml.as_bytes()).unwrap();
 
-    let repo = YamlPackageRepository::new(RealFileSystem, &package_dir);
+    let repo = YamlPackageRepository::new(RealFileSystem, package_dir.clone());
     let result = repo.get_package("duplicate");
 
     // Should return an error about multiple packages
     assert!(matches!(
         result,
-        Err(selfie::package::port::PackageRepoError::PackageError(
-            PackageError::MultiplePackagesFound { .. }
-        ))
+        Err(selfie::package::port::PackageRepoError::PackageError(ref box_error))
+        if matches!(**box_error, PackageError::MultiplePackagesFound { .. })
     ));
 }

@@ -1,6 +1,6 @@
 {
   "markdown": {
-    "lineWidth": 80,
+    "lineWidth": 100,
     "textWrap": "always",
   },
   "dockerfile": {},

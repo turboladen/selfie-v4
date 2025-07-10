@@ -6,17 +6,42 @@ use crate::{config::AppConfig, fs::FileSystem};
 
 use super::loader::{ConfigLoadError, ConfigLoader};
 
+/// YAML-based configuration loader implementation
+///
+/// Loads application configuration from YAML files in standard locations.
+/// Supports both `.yaml` and `.yml` file extensions and handles path expansion.
 pub struct YamlLoader<'a, F: FileSystem> {
+    /// File system abstraction for reading files and paths
     fs: &'a F,
 }
 
 impl<'a, F: FileSystem> YamlLoader<'a, F> {
+    /// Create a new YAML configuration loader
+    ///
+    /// # Arguments
+    ///
+    /// * `fs` - File system abstraction for reading configuration files
+    #[must_use]
     pub fn new(fs: &'a F) -> Self {
         Self { fs }
     }
 }
 
 impl<F: FileSystem> ConfigLoader for YamlLoader<'_, F> {
+    /// Load configuration from YAML files in standard locations
+    ///
+    /// Searches for `config.yaml` or `config.yml` in the user's configuration directory
+    /// and loads the first one found. Performs path expansion for the package directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigLoadError`] if:
+    /// - No configuration file is found in standard locations
+    /// - Multiple configuration files are found (both .yaml and .yml)
+    /// - File system access fails
+    /// - YAML content is malformed or invalid
+    /// - Required configuration fields are missing
+    /// - Configuration field types are incorrect
     fn load_config(&self) -> Result<AppConfig, ConfigLoadError> {
         let config_paths = match self.find_config_file_paths() {
             Ok(paths) => paths,
@@ -33,6 +58,15 @@ impl<F: FileSystem> ConfigLoader for YamlLoader<'_, F> {
                     .collect::<Vec<_>>(),
             ));
         }
+
+        // This should never happen now since find_config_file_paths
+        // either returns a non-empty vector or an error
+        if config_paths.is_empty() {
+            return Err(ConfigLoadError::NotFound {
+                searched: PathBuf::from("~/.config/selfie"),
+            });
+        }
+
         // Start with default configuration
         let mut builder = config::Config::builder();
 
@@ -56,23 +90,37 @@ impl<F: FileSystem> ConfigLoader for YamlLoader<'_, F> {
         Ok(app_config)
     }
 
+    /// Find configuration file paths in standard locations
+    ///
+    /// Searches for both `config.yaml` and `config.yml` in the user's configuration
+    /// directory. Returns all found configuration files.
+    ///
+    /// # Errors
+    ///
+    /// Returns the searched directory path if:
+    /// - The user's configuration directory cannot be determined
+    /// - No configuration files are found in the search location
     fn find_config_file_paths(&self) -> Result<Vec<PathBuf>, PathBuf> {
         let mut paths = Vec::new();
 
-        if let Ok(config_dir) = self.fs.config_dir() {
-            let config_yaml = config_dir.join("config.yaml");
-            let config_yml = config_dir.join("config.yml");
+        let config_dir = self.fs.config_dir().map_err(|_| {
+            // When config_dir fails, we can't determine a search path
+            // Return a generic path to indicate the search location
+            PathBuf::from("~/.config/selfie")
+        })?;
 
-            if self.fs.path_exists(&config_yaml) {
-                paths.push(config_yaml);
-            }
-            if self.fs.path_exists(&config_yml) {
-                paths.push(config_yml);
-            }
+        let config_yaml = config_dir.join("config.yaml");
+        let config_yml = config_dir.join("config.yml");
 
-            if paths.is_empty() {
-                return Err(config_dir);
-            }
+        if self.fs.path_exists(&config_yaml) {
+            paths.push(config_yaml);
+        }
+        if self.fs.path_exists(&config_yml) {
+            paths.push(config_yml);
+        }
+
+        if paths.is_empty() {
+            return Err(config_dir);
         }
 
         Ok(paths)
@@ -157,10 +205,12 @@ mod tests {
                 .return_once(|| Err(FileSystemError::HomeDirNotFound));
 
             let loader = YamlLoader::new(&fs);
-            let paths = loader.find_config_file_paths().unwrap();
+            let result = loader.find_config_file_paths();
 
-            // Should return empty vector when config dir can't be found
-            assert!(paths.is_empty());
+            // Should return error when config dir can't be found
+            assert!(result.is_err());
+            let searched_path = result.unwrap_err();
+            assert_eq!(searched_path, PathBuf::from("~/.config/selfie"));
         }
     }
 
@@ -387,6 +437,111 @@ mod tests {
 
             // Should find both files
             assert!(matches!(err, Err(ConfigLoadError::MultipleFound(_))));
+        }
+
+        #[test]
+        fn test_config_load_invalid_yaml_error() {
+            let mut fs = MockFileSystem::default();
+            let config_dir = Path::new("/home/test/.config/selfie");
+            let config_path = config_dir.join("config.yaml");
+
+            fs.mock_config_dir_ok(&config_dir);
+            fs.mock_path_exists(&config_path, true);
+            fs.mock_path_exists(&config_dir.join("config.yml"), false);
+
+            // Mock invalid YAML content
+            let invalid_yaml = "invalid: yaml: content: [";
+            fs.mock_read_file(&config_path, invalid_yaml);
+
+            let loader = YamlLoader::new(&fs);
+            let result = loader.load_config();
+
+            assert!(result.is_err());
+            match result.unwrap_err() {
+                ConfigLoadError::ConfigError(_) => {
+                    // Expected config error for invalid YAML
+                }
+                _ => panic!("Expected ConfigError for invalid YAML"),
+            }
+        }
+
+        #[test]
+        fn test_config_load_filesystem_error() {
+            let mut fs = MockFileSystem::default();
+            let config_dir = Path::new("/home/test/.config/selfie");
+            let config_path = config_dir.join("config.yaml");
+
+            fs.mock_config_dir_ok(&config_dir);
+            fs.mock_path_exists(&config_path, true);
+            fs.mock_path_exists(&config_dir.join("config.yml"), false);
+
+            // Mock filesystem error when reading file
+            fs.expect_read_file()
+                .with(mockall::predicate::eq(config_path.clone()))
+                .return_once(|_| {
+                    Err(FileSystemError::IoError(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "Permission denied",
+                    )))
+                });
+
+            let loader = YamlLoader::new(&fs);
+            let result = loader.load_config();
+
+            assert!(result.is_err());
+            match result.unwrap_err() {
+                ConfigLoadError::FileSystemError(FileSystemError::IoError(e)) => {
+                    assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied);
+                }
+                other => panic!("Expected FileSystemError::IoError, got: {other:?}"),
+            }
+        }
+
+        #[test]
+        fn test_config_load_config_dir_error() {
+            let mut fs = MockFileSystem::default();
+
+            // Mock config_dir failing
+            fs.expect_config_dir()
+                .return_once(|| Err(FileSystemError::HomeDirNotFound));
+
+            let loader = YamlLoader::new(&fs);
+            let result = loader.load_config();
+
+            assert!(result.is_err());
+            match result.unwrap_err() {
+                ConfigLoadError::NotFound { searched } => {
+                    assert_eq!(searched, PathBuf::from("~/.config/selfie"));
+                }
+                other => panic!("Expected ConfigLoadError::NotFound, got: {other:?}"),
+            }
+        }
+
+        #[test]
+        fn test_config_error_display_formatting() {
+            // Test NotFound error
+            let searched_path = PathBuf::from("/searched/paths");
+            let not_found_error = ConfigLoadError::NotFound {
+                searched: searched_path,
+            };
+            assert!(
+                not_found_error
+                    .to_string()
+                    .contains("No configuration file found")
+            );
+            assert!(not_found_error.to_string().contains("/searched/paths"));
+
+            // Test MultipleFound error
+            let multiple_error = ConfigLoadError::MultipleFound(vec![
+                "config1.yaml".to_string(),
+                "config2.yml".to_string(),
+            ]);
+            assert!(
+                multiple_error
+                    .to_string()
+                    .contains("Multiple configuration files found")
+            );
+            assert!(multiple_error.to_string().contains("config1.yaml"));
         }
     }
 }

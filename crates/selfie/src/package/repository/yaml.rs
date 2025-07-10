@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use crate::{
     fs::FileSystem,
@@ -11,14 +14,14 @@ use crate::{
     },
 };
 
-#[derive(Clone)]
-pub struct YamlPackageRepository<'a, F: FileSystem> {
+#[derive(Debug, Clone)]
+pub struct YamlPackageRepository<F: FileSystem> {
     fs: F,
-    package_dir: &'a Path,
+    package_dir: PathBuf,
 }
 
-impl<'a, F: FileSystem> YamlPackageRepository<'a, F> {
-    pub fn new(fs: F, package_dir: &'a Path) -> Self {
+impl<F: FileSystem> YamlPackageRepository<F> {
+    pub fn new(fs: F, package_dir: PathBuf) -> Self {
         Self { fs, package_dir }
     }
 
@@ -28,7 +31,7 @@ impl<'a, F: FileSystem> YamlPackageRepository<'a, F> {
         let entries = self
             .fs
             .list_directory(dir)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
 
         let yaml_files: Vec<PathBuf> = entries
             .into_iter()
@@ -45,6 +48,39 @@ impl<'a, F: FileSystem> YamlPackageRepository<'a, F> {
         Ok(yaml_files)
     }
 
+    /// Enhanced version that tracks search context
+    fn find_package_files_with_context(
+        &self,
+        name: &str,
+        files_examined: &mut usize,
+    ) -> Result<Vec<PathBuf>, std::io::Error> {
+        let entries = self
+            .fs
+            .list_directory(&self.package_dir)
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+
+        let mut matching_files = Vec::new();
+
+        for path in entries {
+            *files_examined += 1;
+
+            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                if file_name == format!("{name}.yml") || file_name == format!("{name}.yaml") {
+                    matching_files.push(path);
+                }
+            }
+        }
+
+        Ok(matching_files)
+    }
+
+    fn get_file_size(&self, path: &Path) -> u64 {
+        self.fs
+            .read_file(path)
+            .map(|content| content.len() as u64)
+            .unwrap_or(0)
+    }
+
     // Load a Package from a file using the FileSystem trait
     fn load_package_from_file(&self, path: &Path) -> Result<Package, PackageParseError> {
         let content = self
@@ -58,7 +94,7 @@ impl<'a, F: FileSystem> YamlPackageRepository<'a, F> {
         let mut package: Package =
             serde_yaml::from_str(&content).map_err(|e| PackageParseError::YamlParse {
                 package_path: path.to_path_buf(),
-                source: e,
+                source: Arc::new(e),
             })?;
         package.path = path.to_path_buf();
 
@@ -66,47 +102,70 @@ impl<'a, F: FileSystem> YamlPackageRepository<'a, F> {
     }
 }
 
-impl<F: FileSystem> PackageRepository for YamlPackageRepository<'_, F> {
+impl<F: FileSystem> PackageRepository for YamlPackageRepository<F> {
     fn get_package(&self, name: &str) -> Result<Package, PackageRepoError> {
-        let package_files = self.find_package_files(name)?;
+        // Check if package directory exists first
+        if !self.fs.path_exists(&self.package_dir) {
+            return Err(PackageRepoError::PackageListError(
+                PackageListError::PackageDirectoryNotFound(self.package_dir.clone()),
+            ));
+        }
+
+        let search_patterns = vec![format!("{}.yml", name), format!("{}.yaml", name)];
+        let mut files_examined = 0;
+
+        let package_files = self
+            .find_package_files_with_context(name, &mut files_examined)
+            .map_err(|e| PackageRepoError::IoError(Arc::new(e)))?;
 
         if package_files.is_empty() {
-            return Err(PackageError::PackageNotFound {
+            return Err(Box::new(PackageError::PackageNotFound {
                 name: name.to_string(),
-                packages_path: self.package_dir.to_path_buf(),
-            }
+                packages_path: self.package_dir.clone(),
+                files_examined,
+                search_patterns,
+            })
             .into());
         }
 
         if package_files.len() > 1 {
-            return Err(PackageError::MultiplePackagesFound {
+            return Err(Box::new(PackageError::MultiplePackagesFound {
                 name: name.to_string(),
-                packages_path: self.package_dir.to_path_buf(),
-            }
+                packages_path: self.package_dir.clone(),
+                conflicting_paths: package_files,
+                files_examined,
+                search_patterns,
+            })
             .into());
         }
 
         let package_file = &package_files[0];
+        let file_size = self.get_file_size(package_file);
+
         let package = self
             .load_package_from_file(package_file)
-            .map_err(|source| PackageError::ParseError {
-                name: name.to_string(),
-                packages_path: self.package_dir.to_path_buf(),
-                source,
+            .map_err(|source| {
+                Box::new(PackageError::ParseError {
+                    name: name.to_string(),
+                    packages_path: self.package_dir.clone(),
+                    failed_file: package_file.clone(),
+                    file_size_bytes: file_size,
+                    source,
+                })
             })?;
 
         Ok(package)
     }
 
     fn list_packages(&self) -> Result<ListPackagesOutput, PackageListError> {
-        if !self.fs.path_exists(self.package_dir) {
+        if !self.fs.path_exists(&self.package_dir) {
             return Err(PackageListError::PackageDirectoryNotFound(
-                self.package_dir.to_path_buf(),
+                self.package_dir.clone(),
             ));
         }
 
         // Get all YAML files in the directory
-        let yaml_files = self.list_yaml_files(self.package_dir)?;
+        let yaml_files = self.list_yaml_files(&self.package_dir).map_err(Arc::new)?;
 
         // Parse each file into a Package
         let mut packages: Vec<Result<Package, PackageParseError>> = Vec::new();
@@ -119,9 +178,9 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<'_, F> {
     }
 
     fn find_package_files(&self, name: &str) -> Result<Vec<PathBuf>, PackageListError> {
-        if !self.fs.path_exists(self.package_dir) {
+        if !self.fs.path_exists(&self.package_dir) {
             return Err(PackageListError::PackageDirectoryNotFound(
-                self.package_dir.to_path_buf(),
+                self.package_dir.clone(),
             ));
         }
 
@@ -154,12 +213,18 @@ mod tests {
         let mut fs = MockFileSystem::default();
         let package_dir = PathBuf::from("/test/packages");
 
+        // Mock path_exists for directory
         fs.expect_path_exists()
             .with(predicate::eq(package_dir.clone()))
             .returning(|_| true);
 
-        // Create mock package file
+        // Mock list_directory to return the package file
         let package_path = package_dir.join("ripgrep.yaml");
+        let package_path_for_list = package_path.clone();
+        fs.expect_list_directory()
+            .with(predicate::eq(package_dir.clone()))
+            .returning(move |_| Ok(vec![package_path_for_list.clone()]));
+
         let yaml = r"
             name: ripgrep
             version: 0.1.0
@@ -168,15 +233,9 @@ mod tests {
                 install: brew install ripgrep
         ";
 
-        fs.expect_path_exists()
-            .with(predicate::eq(package_path.clone()))
-            .returning(|_| true);
-        fs.expect_path_exists()
-            .with(predicate::eq(package_dir.join("ripgrep.yml")))
-            .returning(|_| false);
         fs.mock_read_file(package_path, yaml);
 
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
         let package = repo.get_package("ripgrep").unwrap();
 
         assert_eq!(package.name, "ripgrep");
@@ -187,39 +246,40 @@ mod tests {
     #[test]
     fn test_get_package_not_found() {
         let mut fs = MockFileSystem::default();
+        // Mock filesystem to simulate package not found
         let package_dir = PathBuf::from("/test/packages");
 
+        // Mock path_exists for directory
         fs.expect_path_exists()
             .with(predicate::eq(package_dir.clone()))
             .returning(|_| true);
-        fs.expect_path_exists()
-            .with(predicate::eq(package_dir.join("nonexistent.yaml")))
-            .returning(|_| false);
-        fs.expect_path_exists()
-            .with(predicate::eq(package_dir.join("nonexistent.yml")))
-            .returning(|_| false);
 
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        fs.expect_list_directory()
+            .with(predicate::eq(package_dir.clone()))
+            .returning(|_| Ok(vec![PathBuf::from("/test/packages/other.yaml")]));
+
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
         let result = repo.get_package("nonexistent");
 
         assert!(matches!(
             result,
-            Err(PackageRepoError::PackageError(
-                PackageError::PackageNotFound { .. }
-            ))
+            Err(PackageRepoError::PackageError(ref box_error))
+            if matches!(**box_error, PackageError::PackageNotFound { .. })
         ));
     }
 
     #[test]
     fn test_get_package_directory_not_found() {
         let mut fs = MockFileSystem::default();
+        // Mock filesystem error
         let package_dir = PathBuf::from("/test/nonexistent");
 
+        // Mock path_exists to return false for the directory
         fs.expect_path_exists()
             .with(predicate::eq(package_dir.clone()))
             .returning(|_| false);
 
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
         let result = repo.get_package("ripgrep");
 
         assert!(matches!(
@@ -239,17 +299,25 @@ mod tests {
         let yaml_path = package_dir.join("ripgrep.yaml");
         let yml_path = package_dir.join("ripgrep.yml");
 
-        fs.mock_path_exists(&package_dir, true);
-        fs.mock_path_exists(&yaml_path, true);
-        fs.mock_path_exists(&yml_path, true);
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        // Mock path_exists for directory
+        fs.expect_path_exists()
+            .with(predicate::eq(package_dir.clone()))
+            .returning(|_| true);
+
+        // Mock list_directory to return both files
+        let yaml_path_for_list = yaml_path.clone();
+        let yml_path_for_list = yml_path.clone();
+        fs.expect_list_directory()
+            .with(predicate::eq(package_dir.clone()))
+            .returning(move |_| Ok(vec![yaml_path_for_list.clone(), yml_path_for_list.clone()]));
+
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
         let result = repo.get_package("ripgrep");
 
         assert!(matches!(
             result,
-            Err(PackageRepoError::PackageError(
-                PackageError::MultiplePackagesFound { .. }
-            ))
+            Err(PackageRepoError::PackageError(ref box_error))
+            if matches!(**box_error, PackageError::MultiplePackagesFound { .. })
         ));
     }
 
@@ -284,7 +352,7 @@ mod tests {
             .with(predicate::eq(package_dir.join("nonexistent.yml")))
             .returning(|_| false);
 
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
 
         // Should find ripgrep.yaml
         let files = repo.find_package_files("ripgrep").unwrap();
@@ -340,7 +408,7 @@ mod tests {
         fs.mock_read_file(package_dir.join("fzf.yml"), package2);
         fs.mock_read_file(package_dir.join("invalid.yaml"), "not valid yaml: :");
 
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
         let package_output = repo.list_packages().unwrap();
 
         // Should find both valid packages
@@ -387,7 +455,7 @@ mod tests {
                 ])
             });
 
-        let repo = YamlPackageRepository::new(fs, Path::new("/dummy")); // Path doesn't matter here
+        let repo = YamlPackageRepository::new(fs, Path::new("/dummy").to_path_buf()); // Path doesn't matter here
         let yaml_files = repo.list_yaml_files(&dir).unwrap();
 
         // Should find all yaml/yml files regardless of case
@@ -442,7 +510,7 @@ mod tests {
         fs.mock_read_file(package_dir.join("fzf.yml"), package2);
         fs.mock_read_file(package_dir.join("invalid.yaml"), "not valid yaml: :");
 
-        let repo = YamlPackageRepository::new(fs, &package_dir);
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
         let packages = repo.available_packages().unwrap();
 
         // Should find only valid packages
@@ -451,5 +519,170 @@ mod tests {
         // Check package details
         assert!(packages.iter().any(|p| *p == "ripgrep"));
         assert!(packages.iter().any(|p| *p == "fzf"));
+    }
+
+    #[test]
+    fn test_package_parse_error_handling() {
+        let mut fs = MockFileSystem::default();
+        let package_dir = PathBuf::from("/test/packages");
+        let package_path = package_dir.join("invalid.yaml");
+
+        fs.expect_path_exists()
+            .with(predicate::eq(package_dir.clone()))
+            .returning(|_| true);
+
+        fs.expect_path_exists()
+            .with(predicate::eq(package_path.clone()))
+            .returning(|_| true);
+
+        fs.expect_path_exists()
+            .with(predicate::eq(package_dir.join("invalid.yml")))
+            .returning(|_| false);
+
+        // Mock invalid YAML content
+        let invalid_yaml = "invalid: yaml: content: [";
+
+        fs.mock_list_directory(package_dir.clone(), &[package_path.clone()]);
+        fs.mock_read_file(package_path.clone(), invalid_yaml);
+
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
+        let result = repo.get_package("invalid");
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            PackageRepoError::PackageError(box_error) => match *box_error {
+                PackageError::ParseError {
+                    name,
+                    packages_path,
+                    source,
+                    ..
+                } => {
+                    assert_eq!(name, "invalid");
+                    assert_eq!(packages_path, package_dir);
+                    match source {
+                        PackageParseError::YamlParse {
+                            package_path: error_path,
+                            ..
+                        } => {
+                            assert_eq!(error_path, package_path);
+                        }
+                        _ => panic!("Expected YamlParse error"),
+                    }
+                }
+                _ => panic!("Expected ParseError"),
+            },
+            _ => panic!("Expected PackageError"),
+        }
+    }
+
+    #[test]
+    fn test_directory_not_found_error() {
+        let mut fs = MockFileSystem::default();
+        let nonexistent_dir = PathBuf::from("/nonexistent");
+
+        fs.expect_path_exists()
+            .with(predicate::eq(nonexistent_dir.clone()))
+            .returning(|_| false);
+
+        let repo = YamlPackageRepository::new(fs, nonexistent_dir.clone());
+        let result = repo.list_packages();
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            PackageListError::PackageDirectoryNotFound(path) => {
+                assert_eq!(path, nonexistent_dir);
+            }
+            _ => panic!("Expected PackageDirectoryNotFound error"),
+        }
+    }
+
+    #[test]
+    fn test_multiple_packages_found_error() {
+        let mut fs = MockFileSystem::default();
+        let package_dir = PathBuf::from("/test/packages");
+
+        fs.expect_path_exists()
+            .with(predicate::eq(package_dir.clone()))
+            .returning(|_| true);
+
+        let file1 = package_dir.join("duplicate.yaml");
+        let file2 = package_dir.join("duplicate.yml");
+
+        fs.expect_path_exists()
+            .with(predicate::eq(file1.clone()))
+            .returning(|_| true);
+        fs.expect_path_exists()
+            .with(predicate::eq(file2.clone()))
+            .returning(|_| true);
+
+        // Create multiple files with the same package name
+        let package_yaml = r"
+            name: duplicate
+            version: 1.0.0
+            environments:
+              test-env:
+                install: echo test
+        ";
+
+        fs.mock_list_directory(package_dir.clone(), &[file1.clone(), file2.clone()]);
+        fs.mock_read_file(file1, package_yaml);
+        fs.mock_read_file(file2, package_yaml);
+
+        let repo = YamlPackageRepository::new(fs, package_dir.clone());
+        let result = repo.get_package("duplicate");
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            PackageRepoError::PackageError(box_error) => match *box_error {
+                PackageError::MultiplePackagesFound {
+                    name,
+                    packages_path,
+                    ..
+                } => {
+                    assert_eq!(name, "duplicate");
+                    assert_eq!(packages_path, package_dir);
+                }
+                _ => panic!("Expected MultiplePackagesFound error"),
+            },
+            _ => panic!("Expected PackageError"),
+        }
+    }
+
+    #[test]
+    fn test_error_display_formatting() {
+        let package_dir = PathBuf::from("/packages");
+
+        // Test PackageNotFound error
+        let not_found_error = PackageError::PackageNotFound {
+            name: "missing".to_string(),
+            packages_path: package_dir.clone(),
+            files_examined: 0,
+            search_patterns: vec!["missing.yml".to_string()],
+        };
+        assert!(not_found_error.to_string().contains("missing"));
+        assert!(not_found_error.to_string().contains("/packages"));
+
+        // Test MultiplePackagesFound error
+        let multiple_error = PackageError::MultiplePackagesFound {
+            name: "duplicate".to_string(),
+            packages_path: package_dir.clone(),
+            conflicting_paths: vec![
+                PathBuf::from("/packages/duplicate.yml"),
+                PathBuf::from("/packages/duplicate.yaml"),
+            ],
+            files_examined: 2,
+            search_patterns: vec!["duplicate.yml".to_string(), "duplicate.yaml".to_string()],
+        };
+        assert!(multiple_error.to_string().contains("duplicate"));
+        assert!(
+            multiple_error
+                .to_string()
+                .contains("Multiple packages found")
+        );
+
+        // Test PackageDirectoryNotFound error
+        let dir_error = PackageListError::PackageDirectoryNotFound(package_dir.clone());
+        assert!(dir_error.to_string().contains("/packages"));
+        assert!(dir_error.to_string().contains("does not exist"));
     }
 }

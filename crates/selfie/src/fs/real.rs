@@ -10,7 +10,7 @@ use etcetera::{AppStrategy, AppStrategyArgs, choose_app_strategy};
 use super::filesystem::{FileSystem, FileSystemError};
 
 /// Real file system implementation
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct RealFileSystem;
 
 impl FileSystem for RealFileSystem {
@@ -219,6 +219,79 @@ mod tests {
                     // Test passed
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_read_file_error_handling() {
+        let fs = RealFileSystem;
+
+        // Test reading a file that doesn't exist
+        let result = fs.read_file(Path::new("/nonexistent/file.txt"));
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            FileSystemError::IoError(io_error) => {
+                assert_eq!(io_error.kind(), std::io::ErrorKind::NotFound);
+            }
+            _ => panic!("Expected IoError with NotFound"),
+        }
+    }
+
+    #[test]
+    fn test_list_directory_error_handling() {
+        let fs = RealFileSystem;
+
+        // Test listing a directory that doesn't exist
+        let result = fs.list_directory(Path::new("/nonexistent/directory"));
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            FileSystemError::IoError(io_error) => {
+                assert_eq!(io_error.kind(), std::io::ErrorKind::NotFound);
+            }
+            _ => panic!("Expected IoError with NotFound"),
+        }
+    }
+
+    #[test]
+    fn test_canonicalize_error_handling() {
+        let fs = RealFileSystem;
+
+        // Test canonicalizing a path that doesn't exist
+        let result = fs.canonicalize(Path::new("/nonexistent/path"));
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            FileSystemError::IoError(io_error) => {
+                assert_eq!(io_error.kind(), std::io::ErrorKind::NotFound);
+            }
+            _ => panic!("Expected IoError with NotFound"),
+        }
+    }
+
+    #[test]
+    fn test_filesystem_error_display() {
+        let io_error = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Access denied");
+        let fs_error = FileSystemError::IoError(io_error);
+
+        assert_eq!(fs_error.to_string(), "IO error: Access denied");
+
+        let home_error = FileSystemError::HomeDirNotFound;
+        assert_eq!(home_error.to_string(), "Home directory not found");
+    }
+
+    #[test]
+    fn test_filesystem_error_from_io_error() {
+        let io_error = std::io::Error::other("test error");
+        let fs_error = FileSystemError::from(io_error);
+
+        match fs_error {
+            FileSystemError::IoError(inner) => {
+                assert_eq!(inner.kind(), std::io::ErrorKind::Other);
+                assert_eq!(inner.to_string(), "test error");
+            }
+            _ => panic!("Expected IoError variant"),
         }
     }
 }

@@ -1,12 +1,16 @@
 use selfie::{
-    commands::{ShellCommandRunner, runner::CommandRunner},
+    commands::ShellCommandRunner,
     config::AppConfig,
     fs::real::RealFileSystem,
-    package::{Package, port::PackageRepository, repository::YamlPackageRepository},
+    package::{
+        event::{CheckResult, CheckResultData, PackageEvent},
+        repository::YamlPackageRepository,
+        service::{PackageService, PackageServiceImpl},
+    },
 };
 
 use crate::{
-    commands::package::handle_package_repo_error,
+    event_processor::EventProcessor, formatters::format_key,
     terminal_progress_reporter::TerminalProgressReporter,
 };
 
@@ -17,113 +21,235 @@ pub(crate) async fn handle_check(
 ) -> i32 {
     tracing::debug!("Running check command for package: {}", package_name);
 
-    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory());
+    // Create the repository and command runner
+    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
     let command_runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
 
-    match repo.get_package(package_name) {
-        Ok(package) => {
-            execute_package_check(&package, package_name, config, &command_runner, reporter).await
-        }
-        Err(e) => {
-            handle_package_repo_error(e, &repo, reporter);
-            1
-        }
-    }
-}
+    // Create the package service implementation with our repository and command runner
+    let service = PackageServiceImpl::new(repo, command_runner, config.clone());
 
-async fn execute_package_check(
-    package: &Package,
-    package_name: &str,
-    config: &AppConfig,
-    command_runner: &ShellCommandRunner,
-    reporter: TerminalProgressReporter,
-) -> i32 {
-    // Get the environment configuration for the current environment
-    let current_env = config.environment();
+    // Call the service's check method to get an event stream
+    let event_stream = service.check(package_name).await;
 
-    if let Some(env_config) = package.environments().get(current_env) {
-        if let Some(check_cmd) = env_config.check() {
-            execute_check_command(
-                package_name,
-                current_env,
-                check_cmd,
-                config,
-                command_runner,
-                reporter,
-            )
-            .await
-        } else {
-            // No check command defined for this environment
-            reporter.report_info(format!(
-                "No check command defined for package '{}' in environment '{}'",
-                package_name, current_env
-            ));
-            // Return success since there's no check command
-            0
-        }
-    } else {
-        // Environment not defined for this package
-        reporter.report_warning(format!(
-            "Package '{}' does not support environment '{}'",
-            package_name, current_env
-        ));
-        1
-    }
-}
-
-async fn execute_check_command(
-    package_name: &str,
-    environment: &str,
-    check_cmd: &str,
-    config: &AppConfig,
-    command_runner: &ShellCommandRunner,
-    reporter: TerminalProgressReporter,
-) -> i32 {
-    // Inform user what we're doing
-    reporter.report_info(format!(
-        "Checking package '{}' in environment '{}'",
-        package_name, environment
-    ));
-
-    // Run the check command
-    match command_runner
-        .execute_with_timeout(check_cmd, config.command_timeout())
+    // Process the event stream with custom handling for structured data
+    let processor = EventProcessor::new(reporter);
+    processor
+        .process_events_with_handler(event_stream, |event, _reporter| {
+            handle_check_event(event, config)
+        })
         .await
-    {
-        Ok(output) => process_command_output(output, package_name, config, reporter),
-        Err(error) => {
-            reporter.report_error(format!("Failed to execute check command: {}", error));
-            1
+}
+
+fn handle_check_event(event: &PackageEvent, config: &AppConfig) -> Option<bool> {
+    match event {
+        PackageEvent::CheckResultCompleted { check_result, .. } => {
+            display_check_result_card(check_result, config);
+            Some(true) // Continue processing
         }
+        PackageEvent::Progress {
+            percent_complete,
+            step,
+            total_steps,
+            message,
+            ..
+        } => {
+            // Custom progress format for check command
+            println!(
+                "• [{:.0}%] Step {}/{}: {}",
+                percent_complete * 100.0,
+                step,
+                total_steps,
+                message
+            );
+            Some(true) // Continue processing
+        }
+        _ => None, // Use default handling for other events
     }
 }
 
-fn process_command_output(
-    output: selfie::commands::runner::CommandOutput,
-    package_name: &str,
-    config: &AppConfig,
-    reporter: TerminalProgressReporter,
-) -> i32 {
-    // If verbose mode is enabled, print the command output
-    if config.verbose() {
-        if !output.stdout_str().trim().is_empty() {
-            println!("{}", output.stdout_str());
-        }
-        if !output.stderr_str().trim().is_empty() {
-            eprintln!("{}", output.stderr_str());
-        }
+fn display_check_result_card(check_result: &CheckResultData, config: &AppConfig) {
+    println!();
+    println!("📋 Check Results:");
+
+    let format_key_fn =
+        |field: &str| -> String { format!("   {}: ", format_key(field, config.use_colors())) };
+
+    println!("{}{}", format_key_fn("Package"), check_result.package_name);
+    println!(
+        "{}{}",
+        format_key_fn("Environment"),
+        check_result.environment
+    );
+
+    if let Some(cmd) = &check_result.check_command {
+        println!("{}{}", format_key_fn("Command"), cmd);
     }
 
-    // Return success/failure based on the command's exit code
-    if output.is_success() {
-        reporter.report_success(format!("Package '{}' is installed", package_name));
-        0
-    } else {
-        reporter.report_info(format!(
-            "Package '{}' not installed (exit code: {})",
-            package_name,
-            output.exit_code()
-        ));
-        output.exit_code()
+    // Format status with appropriate icon and color
+    let status_line = match &check_result.result {
+        CheckResult::Success => {
+            if config.use_colors() {
+                format!(
+                    "{}{}",
+                    format_key_fn("Status"),
+                    console::style("✅ Installed").green().bold()
+                )
+            } else {
+                format!("{}✅ Installed", format_key_fn("Status"))
+            }
+        }
+        CheckResult::Failed {
+            stderr, exit_code, ..
+        } => {
+            let status = if config.use_colors() {
+                format!(
+                    "{}{}",
+                    format_key_fn("Status"),
+                    console::style("❌ Not installed").red().bold()
+                )
+            } else {
+                format!("{}❌ Not installed", format_key_fn("Status"))
+            };
+
+            if !stderr.is_empty() {
+                format!("{}\n{}{}", status, format_key_fn("Details"), stderr.trim())
+            } else if let Some(code) = exit_code {
+                format!("{}\n{}Exit code {}", status, format_key_fn("Details"), code)
+            } else {
+                status
+            }
+        }
+        CheckResult::NoCheckCommand => {
+            if config.use_colors() {
+                format!(
+                    "   {}: {}",
+                    console::style("Status").cyan().bold(),
+                    console::style("⚠️ No check command defined").yellow()
+                )
+            } else {
+                "   Status: ⚠️ No check command defined".to_string()
+            }
+        }
+        CheckResult::CommandNotFound => {
+            if config.use_colors() {
+                format!(
+                    "   {}: {}",
+                    console::style("Status").cyan().bold(),
+                    console::style("❌ Command not found").red().bold()
+                )
+            } else {
+                "   Status: ❌ Command not found".to_string()
+            }
+        }
+        CheckResult::Error(error) => {
+            if config.use_colors() {
+                format!(
+                    "   {}: {}\n   {}: {}",
+                    console::style("Status").cyan().bold(),
+                    console::style("❌ Error").red().bold(),
+                    console::style("Details").cyan().bold(),
+                    error
+                )
+            } else {
+                format!("   Status: ❌ Error\n   Details: {error}")
+            }
+        }
+    };
+
+    println!("{status_line}");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use selfie::package::event::{CheckResult, CheckResultData};
+    use test_common::{TEST_ENV, test_config, test_config_with_colors};
+
+    #[test]
+    fn test_display_check_result_card_success() {
+        let config = test_config();
+        let check_result = CheckResultData {
+            package_name: "test-package".to_string(),
+            environment: TEST_ENV.to_string(),
+            check_command: Some("which test-command".to_string()),
+            result: CheckResult::Success,
+        };
+
+        // Just test that the function doesn't panic
+        display_check_result_card(&check_result, &config);
+    }
+
+    #[test]
+    fn test_display_check_result_card_failed() {
+        let config = test_config();
+        let check_result = CheckResultData {
+            package_name: "test-package".to_string(),
+            environment: TEST_ENV.to_string(),
+            check_command: Some("which missing-command".to_string()),
+            result: CheckResult::Failed {
+                stdout: String::new(),
+                stderr: "command not found".to_string(),
+                exit_code: Some(1),
+            },
+        };
+
+        // Just test that the function doesn't panic
+        display_check_result_card(&check_result, &config);
+    }
+
+    #[test]
+    fn test_display_check_result_card_no_command() {
+        let config = test_config();
+        let check_result = CheckResultData {
+            package_name: "test-package".to_string(),
+            environment: TEST_ENV.to_string(),
+            check_command: None,
+            result: CheckResult::NoCheckCommand,
+        };
+
+        // Just test that the function doesn't panic
+        display_check_result_card(&check_result, &config);
+    }
+
+    #[test]
+    fn test_display_check_result_card_with_colors() {
+        let config = test_config_with_colors();
+        let check_result = CheckResultData {
+            package_name: "test-package".to_string(),
+            environment: TEST_ENV.to_string(),
+            check_command: Some("which test-command".to_string()),
+            result: CheckResult::Success,
+        };
+
+        // Just test that the function doesn't panic with colors enabled
+        display_check_result_card(&check_result, &config);
+    }
+
+    #[test]
+    fn test_display_check_result_card_error() {
+        let config = test_config();
+        let check_result = CheckResultData {
+            package_name: "test-package".to_string(),
+            environment: TEST_ENV.to_string(),
+            check_command: Some("some-command".to_string()),
+            result: CheckResult::Error("Network timeout".to_string()),
+        };
+
+        // Just test that the function doesn't panic
+        display_check_result_card(&check_result, &config);
+    }
+
+    #[test]
+    fn test_display_check_result_card_command_not_found() {
+        let config = test_config();
+        let check_result = CheckResultData {
+            package_name: "test-package".to_string(),
+            environment: TEST_ENV.to_string(),
+            check_command: Some("missing-cmd".to_string()),
+            result: CheckResult::CommandNotFound,
+        };
+
+        // Just test that the function doesn't panic
+        display_check_result_card(&check_result, &config);
     }
 }

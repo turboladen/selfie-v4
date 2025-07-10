@@ -1,115 +1,266 @@
-use std::fmt::Display;
-
+use comfy_table::{ContentArrangement, Table, modifiers, presets};
+use console::style;
 use selfie::{
+    commands::ShellCommandRunner,
     config::AppConfig,
     fs::real::RealFileSystem,
-    package::{port::PackageRepository, repository::YamlPackageRepository},
-    validation::ValidationIssues,
+    package::{
+        event::{PackageEvent, ValidationLevel, ValidationResultData, ValidationStatus},
+        repository::YamlPackageRepository,
+        service::{PackageService, PackageServiceImpl},
+    },
 };
 
 use crate::{
-    commands::{ReportError, package::PackageRepoErrorReporter, report_with_style},
-    tables::ValidationTableReporter,
+    event_processor::EventProcessor, formatters::format_key,
     terminal_progress_reporter::TerminalProgressReporter,
 };
 
-pub(crate) fn handle_validate(
+pub(crate) async fn handle_validate(
     package_name: &str,
     config: &AppConfig,
     reporter: TerminalProgressReporter,
 ) -> i32 {
-    reporter.report_info(format!(
-        "Validating package '{}' in environment: {}",
-        package_name,
-        config.environment()
-    ));
+    tracing::debug!("Running validate command for package: {}", package_name);
 
-    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory());
+    // Create the repository and command runner
+    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
+    let command_runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
 
-    match repo.get_package(package_name) {
-        Ok(package) => {
-            let validation_result = package.validate(config.environment());
-            let issues = validation_result.issues();
+    // Create the package service implementation
+    let service = PackageServiceImpl::new(repo, command_runner, config.clone());
 
-            if issues.has_errors() {
-                handle_validation_errors(issues, &reporter)
-            } else if issues.has_warnings() {
-                handle_validation_warnings(issues, &reporter)
-            } else {
-                display_valid_package_info(&package, config, &reporter)
-            }
+    // Call the service's validate method to get an event stream
+    match service.validate(package_name, None).await {
+        Ok(event_stream) => {
+            // Process the event stream with custom handling for structured data
+            let processor = EventProcessor::new(reporter);
+            processor
+                .process_events_with_handler(event_stream, |event, _reporter| {
+                    handle_validate_event(event, config)
+                })
+                .await
         }
         Err(e) => {
-            let repo: &dyn PackageRepository = &repo;
-            PackageRepoErrorReporter::new(e, repo, reporter).report_error();
+            reporter.report_error(format!("Failed to validate package: {e}"));
             1
         }
     }
 }
 
-fn format_table_key<T: Display>(key: T, use_colors: bool) -> String {
-    use crate::formatters::{FieldStyle, format_field};
-    format_field(key, FieldStyle::Title, use_colors)
+fn handle_validate_event(event: &PackageEvent, config: &AppConfig) -> Option<bool> {
+    match event {
+        PackageEvent::ValidationResultCompleted {
+            validation_result, ..
+        } => {
+            display_validation_result(validation_result, config);
+            Some(true) // Continue processing
+        }
+        _ => None, // Use default handling for other events
+    }
 }
 
-fn handle_validation_errors(issues: &ValidationIssues, reporter: &TerminalProgressReporter) -> i32 {
-    reporter.report_error("Validation failed.");
-
-    let mut table_reporter = ValidationTableReporter::new();
-    table_reporter
-        .setup(vec!["Category", "Field", "Message", "Suggestion"])
-        .add_validation_errors(&issues.errors(), reporter)
-        .add_validation_warnings(&issues.warnings(), reporter)
-        .print();
-    1
+fn display_validation_result(validation_result: &ValidationResultData, config: &AppConfig) {
+    match validation_result.status {
+        ValidationStatus::Valid => {
+            // Show success card for valid packages
+            display_validation_success_card(validation_result, config);
+        }
+        ValidationStatus::HasWarnings | ValidationStatus::HasErrors => {
+            // Show table for packages with issues
+            display_validation_issues_table(validation_result, config);
+        }
+    }
 }
 
-fn handle_validation_warnings(
-    issues: &ValidationIssues,
-    reporter: &TerminalProgressReporter,
-) -> i32 {
-    let mut table_reporter = ValidationTableReporter::new();
-    table_reporter
-        .setup(vec!["Category", "Field", "Message", "Suggestion"])
-        .add_validation_warnings(&issues.warnings(), reporter)
-        .print();
-    0
+fn display_validation_success_card(validation_result: &ValidationResultData, config: &AppConfig) {
+    println!();
+    println!("📋 Validation Results:");
+
+    let format_key_fn =
+        |field: &str| -> String { format!("   {}: ", format_key(field, config.use_colors())) };
+
+    println!(
+        "{}{}",
+        format_key_fn("Package"),
+        validation_result.package_name
+    );
+    println!(
+        "{}{}",
+        format_key_fn("Environment"),
+        validation_result.environment
+    );
+
+    let status = if config.use_colors() {
+        format!(
+            "   {}: {}",
+            console::style("Status").cyan().bold(),
+            console::style("✅ Valid").green().bold()
+        )
+    } else {
+        "   Status: ✅ Valid".to_string()
+    };
+    println!("{status}");
 }
 
-fn display_valid_package_info(
-    package: &selfie::package::Package,
-    config: &AppConfig,
-    reporter: &TerminalProgressReporter,
-) -> i32 {
-    reporter.report_success("Package is valid.");
+fn display_validation_issues_table(validation_result: &ValidationResultData, config: &AppConfig) {
+    if validation_result.issues.is_empty() {
+        return;
+    }
 
-    report_with_style("name:", package.name());
-    report_with_style("version:", package.version());
-    report_with_style("homepage:", package.homepage().unwrap_or_default());
-    report_with_style("description:", package.description().unwrap_or_default());
-    report_with_style("environments:", "");
+    println!();
 
-    display_environments(package, config);
-    0
-}
+    // Show summary
+    let error_count = validation_result
+        .issues
+        .iter()
+        .filter(|i| matches!(i.level, ValidationLevel::Error))
+        .count();
+    let warning_count = validation_result
+        .issues
+        .iter()
+        .filter(|i| matches!(i.level, ValidationLevel::Warning))
+        .count();
 
-fn display_environments(package: &selfie::package::Package, config: &AppConfig) {
-    for (name, env_config) in package.environments() {
-        report_with_style(format!("- {name}"), "");
+    let summary = if error_count > 0 && warning_count > 0 {
+        format!("📋 Validation Issues ({error_count} error(s), {warning_count} warning(s)):")
+    } else if error_count > 0 {
+        format!("📋 Validation Errors ({error_count}):")
+    } else {
+        format!("📋 Validation Warnings ({warning_count}):")
+    };
 
-        let mut env_table = ValidationTableReporter::new();
-        env_table.setup(vec!["Key", "Value"]);
+    println!("{summary}");
 
-        let install_key = format_table_key("install", config.use_colors());
-        let check_key = format_table_key("check", config.use_colors());
-        let dependencies_key = format_table_key("dependencies", config.use_colors());
+    let mut table = create_validation_table();
+    table.set_header(vec!["Level", "Category", "Field", "Message", "Suggestion"]);
 
-        env_table.add_row(vec![&install_key, env_config.install()]);
-        env_table.add_row(vec![&check_key, env_config.check().unwrap_or_default()]);
-        env_table.add_row(vec![
-            &dependencies_key,
-            &env_config.dependencies().join(", "),
+    for issue in &validation_result.issues {
+        let level = match issue.level {
+            ValidationLevel::Error => {
+                if config.use_colors() {
+                    style("ERROR").red().bold().to_string()
+                } else {
+                    "ERROR".to_string()
+                }
+            }
+            ValidationLevel::Warning => {
+                if config.use_colors() {
+                    style("WARN").yellow().bold().to_string()
+                } else {
+                    "WARN".to_string()
+                }
+            }
+        };
+
+        let category = if config.use_colors() {
+            style(&issue.category).magenta().to_string()
+        } else {
+            issue.category.clone()
+        };
+
+        let field = if config.use_colors() {
+            style(&issue.field).cyan().to_string()
+        } else {
+            issue.field.clone()
+        };
+
+        let suggestion = issue.suggestion.as_deref().unwrap_or("-");
+
+        table.add_row(vec![
+            level,
+            category,
+            field,
+            issue.message.clone(),
+            suggestion.to_string(),
         ]);
-        env_table.print();
+    }
+
+    println!("{table}");
+}
+
+fn create_validation_table() -> Table {
+    let mut table = Table::new();
+    table
+        .load_preset(presets::UTF8_FULL_CONDENSED)
+        .apply_modifier(modifiers::UTF8_ROUND_CORNERS)
+        .set_content_arrangement(ContentArrangement::Dynamic);
+    table
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use selfie::package::event::{
+        ValidationIssueData, ValidationLevel, ValidationResultData, ValidationStatus,
+    };
+    use test_common::{TEST_ENV, test_config, test_config_with_colors};
+
+    fn create_test_validation_result(status: ValidationStatus) -> ValidationResultData {
+        ValidationResultData {
+            package_name: "test-package".to_string(),
+            environment: TEST_ENV.to_string(),
+            status,
+            issues: vec![],
+        }
+    }
+
+    #[test]
+    fn test_display_validation_result_success() {
+        let config = test_config();
+        let validation_result = create_test_validation_result(ValidationStatus::Valid);
+
+        // Should not panic
+        display_validation_result(&validation_result, &config);
+    }
+
+    #[test]
+    fn test_display_validation_success_card() {
+        let config = test_config();
+        let validation_result = create_test_validation_result(ValidationStatus::Valid);
+
+        // Should not panic
+        display_validation_success_card(&validation_result, &config);
+    }
+
+    #[test]
+    fn test_display_validation_result_with_colors() {
+        let config = test_config_with_colors();
+        let validation_result = create_test_validation_result(ValidationStatus::Valid);
+
+        // Should not panic with colors enabled
+        display_validation_success_card(&validation_result, &config);
+    }
+
+    #[test]
+    fn test_display_validation_issues_table_empty() {
+        let config = test_config();
+        let validation_result = create_test_validation_result(ValidationStatus::Valid);
+
+        // Should not display anything for empty issues
+        display_validation_issues_table(&validation_result, &config);
+    }
+
+    #[test]
+    fn test_display_validation_result_with_issues() {
+        let config = test_config();
+        let mut validation_result = create_test_validation_result(ValidationStatus::HasErrors);
+        validation_result.issues = vec![ValidationIssueData {
+            level: ValidationLevel::Error,
+            category: "package".to_string(),
+            field: "name".to_string(),
+            message: "Package name is required".to_string(),
+            suggestion: Some("Add a name field".to_string()),
+        }];
+
+        // Should not panic
+        display_validation_issues_table(&validation_result, &config);
+    }
+
+    #[test]
+    fn test_create_validation_table() {
+        let table = create_validation_table();
+        // Just test that table creation doesn't panic
+        let _table_str = table.to_string();
     }
 }
