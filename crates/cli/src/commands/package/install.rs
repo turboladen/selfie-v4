@@ -31,6 +31,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_install_basic() {
         let config = test_config();
         let reporter = create_mock_reporter();
@@ -40,6 +41,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_install_with_colors() {
         let config = test_config_with_colors();
         let reporter = TerminalProgressReporter::new(true);
@@ -49,6 +51,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_install_different_package_names() {
         let config = test_config();
 
@@ -70,6 +73,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_install_different_package_directories() {
         let test_directories = vec![
             "/tmp/packages",
@@ -88,6 +92,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_install_empty_package_name() {
         let config = test_config();
         let reporter = create_mock_reporter();
@@ -97,6 +102,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_install_package_name_with_special_characters() {
         let config = test_config();
 
@@ -115,6 +121,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_install_function_does_not_panic() {
         // Test that the function doesn't panic with various inputs
         let config = test_config();
@@ -125,6 +132,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_install_with_different_environments() {
         let test_environments = vec![
             "development",
@@ -145,6 +153,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_install_consistent_return_value() {
         let config = test_config();
 

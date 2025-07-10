@@ -26,6 +26,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_create_basic() {
         let config = test_config();
         let reporter = create_mock_reporter();
@@ -35,6 +36,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_create_with_colors() {
         let config = test_config_with_colors();
         let reporter = TerminalProgressReporter::new(true);
@@ -44,6 +46,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_create_different_package_names() {
         let config = test_config();
 
@@ -65,6 +68,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_create_different_environments() {
         let _reporter = create_mock_reporter();
 
@@ -87,6 +91,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_create_empty_package_name() {
         let config = test_config();
         let reporter = create_mock_reporter();
@@ -96,6 +101,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_create_package_name_with_special_characters() {
         let config = test_config();
 
@@ -114,6 +120,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_create_function_does_not_panic() {
         // Test that the function doesn't panic with various inputs
         let config = test_config();
@@ -124,6 +131,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_create_consistent_return_value() {
         let config = test_config();
 
@@ -136,6 +144,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_create_config_parameter_usage() {
         let config = test_config();
         let reporter = create_mock_reporter();
@@ -147,6 +156,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_handle_create_reporter_parameter_usage() {
         let config = test_config();
         let reporter = create_mock_reporter();

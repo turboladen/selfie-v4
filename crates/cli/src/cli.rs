@@ -23,7 +23,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
-/// Main CLI structure for the selfie package manager
+/// Selfie - A personal package manager
 ///
 /// Defines the top-level command-line interface including global options
 /// that can be used with any subcommand. Global options override values
