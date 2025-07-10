@@ -28,6 +28,10 @@ impl FileSystem for RealFileSystem {
         Ok(())
     }
 
+    fn remove_file(&self, path: &Path) -> Result<(), FileSystemError> {
+        fs::remove_file(path).map_err(|e| FileSystemError::IoError(Arc::new(e)))
+    }
+
     fn path_exists(&self, path: &Path) -> bool {
         path.exists()
     }
@@ -148,8 +152,8 @@ mod tests {
         let fs = RealFileSystem;
 
         // Create a temporary directory
-        let dir = tempdir().unwrap();
-        let file_path = dir.path().join("test_write.txt");
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_write.txt");
 
         // Test writing to a file
         let test_content = b"Hello, world!";
@@ -160,12 +164,37 @@ mod tests {
         assert_eq!(content, test_content);
 
         // Test writing to a file in a nested directory that doesn't exist
-        let nested_path = dir.path().join("nested").join("dir").join("test.txt");
+        let nested_path = temp_dir.path().join("nested").join("dir").join("test.txt");
         fs.write_file(&nested_path, test_content).unwrap();
 
         // Verify the file was written and directories were created
         let nested_content = std::fs::read(&nested_path).unwrap();
         assert_eq!(nested_content, test_content);
+    }
+
+    #[test]
+    fn test_remove_file() {
+        let fs = RealFileSystem;
+
+        // Create a temporary directory and file
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_remove.txt");
+
+        // Create the file
+        let test_content = b"File to be removed";
+        std::fs::write(&file_path, test_content).unwrap();
+        assert!(file_path.exists());
+
+        // Remove the file
+        fs.remove_file(&file_path).unwrap();
+
+        // Verify the file was removed
+        assert!(!file_path.exists());
+
+        // Test removing a non-existent file should fail
+        let non_existent = temp_dir.path().join("non_existent.txt");
+        let err = fs.remove_file(&non_existent).unwrap_err();
+        assert!(matches!(err, FileSystemError::IoError(_)));
     }
 
     #[test]

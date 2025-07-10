@@ -137,6 +137,51 @@ pub trait PackageRepository: Send + Sync {
     /// - The target directory doesn't exist or isn't writable
     /// - File system operations fail
     fn save_package(&self, package: &Package, path: &Path) -> Result<(), PackageRepoError>;
+
+    /// Remove a package from the repository
+    ///
+    /// Deletes the package definition file from the file system. This operation
+    /// is irreversible and should only be performed after appropriate user confirmation.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Name of the package to remove
+    ///
+    /// # Returns
+    ///
+    /// Success if the package was removed successfully
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PackageRepoError`] if:
+    /// - The package does not exist
+    /// - Permission is denied to delete the file
+    /// - File system operations fail
+    fn remove_package(&self, name: &str) -> Result<(), PackageRepoError>;
+
+    /// Find packages that depend on the specified target package
+    ///
+    /// Searches through all packages in the repository to identify which ones
+    /// list the target package as a dependency in any of their environments.
+    /// This is useful for dependency analysis before removing packages.
+    ///
+    /// # Arguments
+    ///
+    /// * `target_package` - Name of the package to find dependents for
+    ///
+    /// # Returns
+    ///
+    /// A vector of packages that depend on the target package
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PackageRepoError`] if:
+    /// - The package listing operation fails
+    /// - File system access fails
+    fn find_dependent_packages(
+        &self,
+        target_package: &str,
+    ) -> Result<Vec<Package>, PackageRepoError>;
 }
 
 /// Errors that can occur during package repository operations
@@ -351,6 +396,124 @@ impl PackageParseError {
             PackageParseError::YamlParse { package_path, .. } => package_path,
             PackageParseError::IoError { package_path, .. } => package_path,
             PackageParseError::FileSystemError { package_path, .. } => package_path,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockall::predicate::*;
+
+    #[test]
+    fn test_mock_find_dependent_packages() {
+        // Test that the new find_dependent_packages method can be mocked
+        let mut mock_repo = MockPackageRepository::new();
+
+        // Set up expectations
+        mock_repo
+            .expect_find_dependent_packages()
+            .with(eq("target-package"))
+            .times(1)
+            .returning(|_| {
+                use crate::package::Package;
+
+                use std::path::PathBuf;
+
+                let mut env1 = std::collections::HashMap::new();
+                env1.insert(
+                    "test".to_string(),
+                    crate::package::EnvironmentConfig::new(
+                        "echo install".to_string(),
+                        None,
+                        vec!["target-package".to_string()],
+                    ),
+                );
+
+                let mut env2 = std::collections::HashMap::new();
+                env2.insert(
+                    "test".to_string(),
+                    crate::package::EnvironmentConfig::new(
+                        "echo install".to_string(),
+                        None,
+                        vec!["target-package".to_string()],
+                    ),
+                );
+
+                Ok(vec![
+                    Package::new(
+                        "dependent1".to_string(),
+                        "1.0.0".to_string(),
+                        None,
+                        None,
+                        env1,
+                        PathBuf::from("/test/dependent1.yml"),
+                    ),
+                    Package::new(
+                        "dependent2".to_string(),
+                        "1.0.0".to_string(),
+                        None,
+                        None,
+                        env2,
+                        PathBuf::from("/test/dependent2.yml"),
+                    ),
+                ])
+            });
+
+        // Call the mocked method
+        let result = mock_repo.find_dependent_packages("target-package");
+
+        // Verify the result
+        assert!(result.is_ok());
+        let dependents = result.unwrap();
+        assert_eq!(dependents.len(), 2);
+
+        let names: Vec<String> = dependents.iter().map(|p| p.name().to_string()).collect();
+        assert!(names.contains(&"dependent1".to_string()));
+        assert!(names.contains(&"dependent2".to_string()));
+    }
+
+    #[test]
+    fn test_mock_find_dependent_packages_empty() {
+        // Test mocking when no dependents are found
+        let mut mock_repo = MockPackageRepository::new();
+
+        mock_repo
+            .expect_find_dependent_packages()
+            .with(eq("standalone-package"))
+            .times(1)
+            .returning(|_| Ok(vec![]));
+
+        let result = mock_repo.find_dependent_packages("standalone-package");
+
+        assert!(result.is_ok());
+        let dependents = result.unwrap();
+        assert!(dependents.is_empty());
+    }
+
+    #[test]
+    fn test_mock_find_dependent_packages_error() {
+        // Test mocking error conditions
+        let mut mock_repo = MockPackageRepository::new();
+
+        mock_repo
+            .expect_find_dependent_packages()
+            .with(eq("error-package"))
+            .times(1)
+            .returning(|_| {
+                Err(PackageRepoError::PackageListError(
+                    PackageListError::PackageDirectoryNotFound(PathBuf::from("/nonexistent")),
+                ))
+            });
+
+        let result = mock_repo.find_dependent_packages("error-package");
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            PackageRepoError::PackageListError(PackageListError::PackageDirectoryNotFound(_)) => {
+                // Expected error type
+            }
+            _ => panic!("Expected PackageDirectoryNotFound error"),
         }
     }
 }

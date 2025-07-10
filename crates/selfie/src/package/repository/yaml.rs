@@ -213,6 +213,46 @@ impl<F: FileSystem> PackageRepository for YamlPackageRepository<F> {
 
         Ok(())
     }
+
+    fn remove_package(&self, name: &str) -> Result<(), PackageRepoError> {
+        // First, get the package to find its file path
+        let package_blob = self.get_package(name)?;
+
+        // Remove the file from the file system
+        self.fs.remove_file(&package_blob.file_path)?;
+
+        Ok(())
+    }
+
+    fn find_dependent_packages(
+        &self,
+        target_package: &str,
+    ) -> Result<Vec<Package>, PackageRepoError> {
+        let mut dependents = Vec::new();
+
+        // Get all packages and check their dependencies
+        let package_list = self.list_packages()?;
+
+        for package in package_list.valid_packages() {
+            // Skip the target package itself
+            if package.name() == target_package {
+                continue;
+            }
+
+            // Check all environments for dependencies
+            for env_config in package.environments().values() {
+                if env_config
+                    .dependencies()
+                    .contains(&target_package.to_string())
+                {
+                    dependents.push(package.clone());
+                    break; // Found dependency, no need to check other environments
+                }
+            }
+        }
+
+        Ok(dependents)
+    }
 }
 
 #[cfg(test)]
@@ -221,7 +261,9 @@ mod tests {
 
     use super::*;
     use crate::fs::filesystem::MockFileSystem;
+    use crate::fs::real::RealFileSystem;
     use crate::package::port::PackageRepoError;
+    use tempfile::TempDir;
 
     #[test]
     fn test_get_package_success() {
@@ -661,6 +703,260 @@ mod tests {
             },
             _ => panic!("Expected PackageError"),
         }
+    }
+
+    #[test]
+    fn test_find_dependent_packages_no_dependencies() {
+        // Test finding dependents when there are none
+        let temp_dir = TempDir::new().unwrap();
+        let package_dir = temp_dir.path().join("packages");
+        std::fs::create_dir_all(&package_dir).unwrap();
+
+        // Create a simple package with no dependencies
+        let package_content = r#"
+name: simple-package
+version: 1.0.0
+environments:
+  test:
+    install: echo 'install'
+    dependencies: []
+"#;
+        std::fs::write(
+            package_dir.join("simple-package.yml"),
+            package_content.trim(),
+        )
+        .unwrap();
+
+        let fs = RealFileSystem;
+        let repo = YamlPackageRepository::new(fs, package_dir);
+
+        let dependents = repo.find_dependent_packages("target-package").unwrap();
+        assert!(dependents.is_empty());
+    }
+
+    #[test]
+    fn test_find_dependent_packages_with_dependencies() {
+        // Test finding dependents when there are some
+        let temp_dir = TempDir::new().unwrap();
+        let package_dir = temp_dir.path().join("packages");
+        std::fs::create_dir_all(&package_dir).unwrap();
+
+        // Create target package
+        let target_content = r#"
+name: target-package
+version: 1.0.0
+environments:
+  test:
+    install: echo 'install target'
+    dependencies: []
+"#;
+        std::fs::write(
+            package_dir.join("target-package.yml"),
+            target_content.trim(),
+        )
+        .unwrap();
+
+        // Create dependent package
+        let dependent_content = r#"
+name: dependent-package
+version: 1.0.0
+environments:
+  test:
+    install: echo 'install dependent'
+    dependencies:
+      - target-package
+"#;
+        std::fs::write(
+            package_dir.join("dependent-package.yml"),
+            dependent_content.trim(),
+        )
+        .unwrap();
+
+        // Create another package without dependency
+        let independent_content = r#"
+name: independent-package
+version: 1.0.0
+environments:
+  test:
+    install: echo 'install independent'
+    dependencies: []
+"#;
+        std::fs::write(
+            package_dir.join("independent-package.yml"),
+            independent_content.trim(),
+        )
+        .unwrap();
+
+        let fs = RealFileSystem;
+        let repo = YamlPackageRepository::new(fs, package_dir);
+
+        let dependents = repo.find_dependent_packages("target-package").unwrap();
+        assert_eq!(dependents.len(), 1);
+        assert_eq!(dependents[0].name(), "dependent-package");
+    }
+
+    #[test]
+    fn test_find_dependent_packages_multiple_environments() {
+        // Test that dependencies are found across different environments
+        let temp_dir = TempDir::new().unwrap();
+        let package_dir = temp_dir.path().join("packages");
+        std::fs::create_dir_all(&package_dir).unwrap();
+
+        // Create target package
+        let target_content = r#"
+name: target-package
+version: 1.0.0
+environments:
+  test:
+    install: echo 'install target'
+    dependencies: []
+"#;
+        std::fs::write(
+            package_dir.join("target-package.yml"),
+            target_content.trim(),
+        )
+        .unwrap();
+
+        // Create dependent package with dependency in production environment
+        let dependent_content = r#"
+name: multi-env-package
+version: 1.0.0
+environments:
+  test:
+    install: echo 'install test'
+    dependencies: []
+  production:
+    install: echo 'install prod'
+    dependencies:
+      - target-package
+"#;
+        std::fs::write(
+            package_dir.join("multi-env-package.yml"),
+            dependent_content.trim(),
+        )
+        .unwrap();
+
+        let fs = RealFileSystem;
+        let repo = YamlPackageRepository::new(fs, package_dir);
+
+        let dependents = repo.find_dependent_packages("target-package").unwrap();
+        assert_eq!(dependents.len(), 1);
+        assert_eq!(dependents[0].name(), "multi-env-package");
+    }
+
+    #[test]
+    fn test_find_dependent_packages_excludes_target_package() {
+        // Test that the target package itself is not included in dependents
+        let temp_dir = TempDir::new().unwrap();
+        let package_dir = temp_dir.path().join("packages");
+        std::fs::create_dir_all(&package_dir).unwrap();
+
+        // Create a self-referencing package (edge case)
+        let self_ref_content = r#"
+name: self-package
+version: 1.0.0
+environments:
+  test:
+    install: echo 'install'
+    dependencies:
+      - self-package
+"#;
+        std::fs::write(
+            package_dir.join("self-package.yml"),
+            self_ref_content.trim(),
+        )
+        .unwrap();
+
+        let fs = RealFileSystem;
+        let repo = YamlPackageRepository::new(fs, package_dir);
+
+        let dependents = repo.find_dependent_packages("self-package").unwrap();
+        assert!(dependents.is_empty());
+    }
+
+    #[test]
+    fn test_find_dependent_packages_multiple_dependents() {
+        // Test finding multiple packages that depend on the same target
+        let temp_dir = TempDir::new().unwrap();
+        let package_dir = temp_dir.path().join("packages");
+        std::fs::create_dir_all(&package_dir).unwrap();
+
+        // Create target package
+        let target_content = r#"
+name: shared-lib
+version: 1.0.0
+environments:
+  test:
+    install: echo 'install shared-lib'
+    dependencies: []
+"#;
+        std::fs::write(package_dir.join("shared-lib.yml"), target_content.trim()).unwrap();
+
+        // Create first dependent package
+        let dependent1_content = r#"
+name: app-one
+version: 1.0.0
+environments:
+  test:
+    install: echo 'install app-one'
+    dependencies:
+      - shared-lib
+"#;
+        std::fs::write(package_dir.join("app-one.yml"), dependent1_content.trim()).unwrap();
+
+        // Create second dependent package
+        let dependent2_content = r#"
+name: app-two
+version: 1.0.0
+environments:
+  test:
+    install: echo 'install app-two'
+    dependencies:
+      - shared-lib
+      - some-other-lib
+"#;
+        std::fs::write(package_dir.join("app-two.yml"), dependent2_content.trim()).unwrap();
+
+        let fs = RealFileSystem;
+        let repo = YamlPackageRepository::new(fs, package_dir);
+
+        let dependents = repo.find_dependent_packages("shared-lib").unwrap();
+        assert_eq!(dependents.len(), 2);
+        let names: Vec<String> = dependents.iter().map(|p| p.name().to_string()).collect();
+        assert!(names.contains(&"app-one".to_string()));
+        assert!(names.contains(&"app-two".to_string()));
+    }
+
+    #[test]
+    fn test_find_dependent_packages_handles_parse_errors() {
+        // Test that the method gracefully handles packages with parse errors
+        let temp_dir = TempDir::new().unwrap();
+        let package_dir = temp_dir.path().join("packages");
+        std::fs::create_dir_all(&package_dir).unwrap();
+
+        // Create a valid package
+        let valid_content = r#"
+name: valid-package
+version: 1.0.0
+environments:
+  test:
+    install: echo 'install valid'
+    dependencies:
+      - target-package
+"#;
+        std::fs::write(package_dir.join("valid-package.yml"), valid_content.trim()).unwrap();
+
+        // Create an invalid package file
+        let invalid_content = "invalid: yaml: content: [unclosed";
+        std::fs::write(package_dir.join("invalid-package.yml"), invalid_content).unwrap();
+
+        let fs = RealFileSystem;
+        let repo = YamlPackageRepository::new(fs, package_dir);
+
+        // Should still find the valid dependent, ignoring the parse error
+        let dependents = repo.find_dependent_packages("target-package").unwrap();
+        assert_eq!(dependents.len(), 1);
+        assert_eq!(dependents[0].name(), "valid-package");
     }
 
     #[test]

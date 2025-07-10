@@ -119,6 +119,9 @@ async fn dispatch_package_command(
         PackageSubcommands::Edit { package_name } => {
             package::edit::handle_edit(package_name, config, reporter).await
         }
+        PackageSubcommands::Remove { package_name } => {
+            package::remove::handle_remove(package_name, config, reporter).await
+        }
         PackageSubcommands::Validate { package_name } => {
             package::validate::handle_validate(package_name, config, reporter).await
         }

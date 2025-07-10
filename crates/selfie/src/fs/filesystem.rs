@@ -58,6 +58,23 @@ pub trait FileSystem: Send + Sync {
     /// - Any other IO error occurs during writing
     fn write_file(&self, path: &Path, data: &[u8]) -> Result<(), FileSystemError>;
 
+    /// Remove a file from the file system
+    ///
+    /// Deletes the file at the specified path. This operation is irreversible.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the file to remove
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FileSystemError`] if:
+    /// - The file does not exist
+    /// - Permission is denied to delete the file
+    /// - The path points to a directory instead of a file
+    /// - Any other IO error occurs during deletion
+    fn remove_file(&self, path: &Path) -> Result<(), FileSystemError>;
+
     /// Check if a path exists
     ///
     /// Tests whether the specified path exists in the file system.
@@ -279,6 +296,24 @@ impl MockFileSystem {
                 mockall::predicate::always(),
             )
             .returning(|_, _| Ok(()));
+    }
+
+    /// Set up a mock for removing a file
+    ///
+    /// Configures the mock to succeed when removing the specified file.
+    /// This is useful for testing package removal operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path where the file removal should succeed
+    pub(crate) fn mock_remove_file<P>(&mut self, path: P)
+    where
+        PathBuf: From<P>,
+    {
+        let path_buf = PathBuf::from(path);
+        self.expect_remove_file()
+            .with(mockall::predicate::eq(path_buf))
+            .returning(|_| Ok(()));
     }
 
     /// Set up a mock for path expansion

@@ -193,6 +193,21 @@ pub(crate) enum PackageSubcommands {
         package_name: String,
     },
 
+    /// Remove a package definition file
+    ///
+    /// Permanently removes a package definition file from the package directory.
+    /// This operation requires confirmation and will warn if the package is a
+    /// dependency of other packages.
+    ///
+    /// Example: `selfie package remove my-tool`
+    Remove {
+        /// Name of the package to remove
+        ///
+        /// The package definition file will be permanently deleted from the
+        /// package directory. This operation cannot be undone.
+        package_name: String,
+    },
+
     /// Validate a package definition file
     ///
     /// Performs comprehensive validation of a package definition including

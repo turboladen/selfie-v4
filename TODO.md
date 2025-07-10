@@ -57,13 +57,14 @@ this, add an event stream pattern implementation that includes:
 2. [x] Bidirectional Communication — Support for control commands from UI to library
 3. [x] Context/Metadata — Each event carries operation context/ID
 
-### Phase 6: Package Creation & Editing
+### Phase 6: Package Create, Edit, Remove
 
 To help get users started (even me), I want to easily add new and edit package files; via the CLI
 this would be via `package create` and `package edit` commands.
 
-- [ ] Add `package create`
+- [x] Add `package create`
 - [x] Add `package edit`
+- [x] Add `package remove`
 
 ### Phase 7: Package Installation
 
