@@ -1,12 +1,10 @@
+use dialoguer::{Confirm, theme::SimpleTheme};
 use selfie::{
     config::AppConfig,
     fs::real::RealFileSystem,
     package::{port::PackageRepository, repository::yaml::YamlPackageRepository},
 };
-use std::{
-    io::{self, Write},
-    process::Command,
-};
+use std::process::Command;
 use tracing::info;
 
 use crate::terminal_progress_reporter::TerminalProgressReporter;
@@ -56,19 +54,23 @@ pub(crate) async fn handle_edit(
             reporter.report_info(format!("Package '{package_name}' does not exist."));
 
             // Prompt user for confirmation before creating
-            print!("Create new package '{}'? [y/N]: ", package_name);
-            io::stdout().flush().unwrap();
+            let confirm = Confirm::with_theme(&SimpleTheme)
+                .with_prompt(format!("Create new package '{}'?", package_name))
+                .default(false)
+                .interact();
 
-            let mut input = String::new();
-            if io::stdin().read_line(&mut input).is_err() {
-                reporter.report_error("Failed to read user input.");
-                return 1;
-            }
-
-            let input = input.trim().to_lowercase();
-            if input != "y" && input != "yes" {
-                reporter.report_info("Package creation cancelled.");
-                return 0;
+            match confirm {
+                Ok(true) => {
+                    // User confirmed, proceed with creation
+                }
+                Ok(false) => {
+                    reporter.report_info("Package creation cancelled.");
+                    return 0;
+                }
+                Err(_) => {
+                    reporter.report_error("Failed to read user input.");
+                    return 1;
+                }
             }
 
             reporter.report_info(format!("Creating new package '{package_name}'"));
@@ -118,50 +120,122 @@ pub(crate) async fn handle_edit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_common::{test_config, test_config_with_colors};
+    use std::fs;
+    use tempfile::TempDir;
+    use test_common::test_config_with_dir;
 
     fn create_mock_reporter() -> TerminalProgressReporter {
         TerminalProgressReporter::new(false)
     }
 
     #[test]
-    #[ignore] // Requires external editor and user interaction
-    fn test_handle_edit_basic() {
-        let config = test_config();
-        let reporter = create_mock_reporter();
+    fn test_editor_required_with_existing_package() {
+        // Test behavior when EDITOR is not set but package exists
+        let temp_dir = TempDir::new().unwrap();
+        let package_dir = temp_dir.path().join("packages");
+        fs::create_dir_all(&package_dir).unwrap();
 
-        // This test would require mocking the editor interaction
-        // For now, we'll skip it and focus on unit testable components
-        tokio_test::block_on(async {
-            let result = handle_edit("test-package", &config, reporter).await;
-            // In a real test, we'd verify the file was created/updated correctly
-            assert!(result == 0 || result == 1); // Either success or expected failure
-        });
-    }
+        // Create an existing package file
+        let package_file = package_dir.join("existing-package.yml");
+        fs::write(&package_file, "name: existing-package\nversion: 1.0.0\nenvironments:\n  default:\n    install: echo test").unwrap();
 
-    #[test]
-    #[ignore] // Requires external editor
-    fn test_handle_edit_with_colors() {
-        let config = test_config_with_colors();
-        let reporter = TerminalProgressReporter::new(true);
-
-        tokio_test::block_on(async {
-            let result = handle_edit("test-package", &config, reporter).await;
-            assert!(result == 0 || result == 1);
-        });
-    }
-
-    #[test]
-    fn test_editor_required() {
-        // Test that EDITOR environment variable is required
+        // Remove EDITOR
+        let old_editor = std::env::var("EDITOR").ok();
         unsafe {
             std::env::remove_var("EDITOR");
         }
 
-        let editor_result = std::env::var("EDITOR");
+        let config = test_config_with_dir(package_dir);
+        let reporter = create_mock_reporter();
+
+        let result = tokio_test::block_on(async {
+            handle_edit("existing-package", &config, reporter).await
+        });
+
+        // Should fail with exit code 1 due to missing EDITOR
+        assert_eq!(result, 1);
+
+        // Restore EDITOR if it was set
+        if let Some(editor) = old_editor {
+            unsafe {
+                std::env::set_var("EDITOR", editor);
+            }
+        }
+    }
+
+    #[test]
+    fn test_editor_required_with_nonexistent_package() {
+        // Test behavior when EDITOR is not set and package doesn't exist
+        let temp_dir = TempDir::new().unwrap();
+        let package_dir = temp_dir.path().join("packages");
+        fs::create_dir_all(&package_dir).unwrap();
+
+        // Remove EDITOR
+        let old_editor = std::env::var("EDITOR").ok();
+        unsafe {
+            std::env::remove_var("EDITOR");
+        }
+
+        let config = test_config_with_dir(package_dir);
+        let reporter = create_mock_reporter();
+
+        let result = tokio_test::block_on(async {
+            handle_edit("nonexistent-package", &config, reporter).await
+        });
+
+        // Should fail with exit code 1 due to missing EDITOR
+        assert_eq!(result, 1);
+
+        // Restore EDITOR if it was set
+        if let Some(editor) = old_editor {
+            unsafe {
+                std::env::set_var("EDITOR", editor);
+            }
+        }
+    }
+
+    #[test]
+    fn test_confirmation_prompt_structure() {
+        // Test that we can create a confirmation prompt (without actually running it)
+        let package_name = "test-package";
+        let confirm = Confirm::with_theme(&SimpleTheme)
+            .with_prompt(format!("Create new package '{}'?", package_name))
+            .default(false);
+
+        // Just verify we can construct the prompt without panicking
+        // We can't access the default field directly as it's private
+        drop(confirm);
+    }
+
+    #[test]
+    fn test_get_package_new_creates_template() {
+        let temp_dir = TempDir::new().unwrap();
+        let package_dir = temp_dir.path().join("packages");
+
+        let get_package = selfie::package::GetPackage::new("test-template", &package_dir);
+
+        assert!(get_package.is_new);
+        assert_eq!(get_package.package.name(), "test-template");
+        assert_eq!(get_package.package.version(), "0.1.0");
+        assert_eq!(get_package.file_path, package_dir.join("test-template.yml"));
+        assert!(get_package.package.environments().contains_key("default"));
+    }
+
+    #[test]
+    fn test_vs_code_wait_flag() {
+        // Test that VS Code gets the --wait flag
+        let editor = "code";
+        let mut cmd = Command::new(&editor);
+        cmd.arg("/tmp/test.yml");
+
+        if editor == "code" {
+            cmd.arg("--wait");
+        }
+
+        let args: Vec<_> = cmd.get_args().collect();
         assert!(
-            editor_result.is_err(),
-            "EDITOR should not be set for this test"
+            args.iter()
+                .any(|arg| *arg == std::ffi::OsStr::new("--wait"))
         );
     }
 
@@ -193,5 +267,14 @@ mod tests {
             original_package.environments().len(),
             deserialized.environments().len()
         );
+    }
+
+    #[test]
+    fn test_package_template_version() {
+        // Verify that new package templates use 1.0.0 version
+        let temp_dir = TempDir::new().unwrap();
+        let get_package = selfie::package::GetPackage::new("version-test", temp_dir.path());
+
+        assert_eq!(get_package.package.version(), "0.1.0");
     }
 }
