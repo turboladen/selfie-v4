@@ -1,16 +1,14 @@
 use dialoguer::{Confirm, Input, MultiSelect, Select, theme::SimpleTheme};
 use selfie::{
     config::AppConfig,
-    fs::real::RealFileSystem,
-    package::{
-        EnvironmentConfig, GetPackage, port::PackageRepository,
-        repository::yaml::YamlPackageRepository,
-    },
+    package::{EnvironmentConfig, GetPackage, port::PackageRepository},
 };
-use std::{collections::HashMap, path::PathBuf, process::Command};
+use std::{collections::HashMap, path::PathBuf};
 use tracing::info;
 
 use crate::terminal_progress_reporter::TerminalProgressReporter;
+
+use super::common;
 
 const MAX_NAME_RETRIES: usize = 3;
 
@@ -29,7 +27,7 @@ pub(crate) async fn handle_create(
     info!("Creating package: {}", package_name);
 
     // Create repository
-    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
+    let repo = common::create_package_repository(config);
 
     // Get a valid package name or handle existing package scenarios
     let package_name = match get_valid_package_name(package_name, &repo, &reporter) {
@@ -39,7 +37,8 @@ pub(crate) async fn handle_create(
                 "Opening existing package for editing at {}",
                 path.display()
             ));
-            return open_editor(&path, &reporter);
+            let success_message = format!("Package editing completed at {}", path.display());
+            return common::open_editor(&path, &reporter, Some(success_message));
         }
         Ok(PackageNameResult::Cancelled) => {
             reporter.report_info("Package creation cancelled.");
@@ -59,9 +58,8 @@ pub(crate) async fn handle_create(
     };
 
     // Save package to file
-    if let Err(e) = repo.save_package(&package_blob.package, &package_blob.file_path) {
-        reporter.report_error(format!("Failed to save package file: {e}"));
-        return 1;
+    if let Err(exit_code) = common::save_package(&repo, &package_blob, &reporter) {
+        return exit_code;
     }
 
     reporter.report_success(format!(
@@ -78,7 +76,14 @@ pub(crate) async fn handle_create(
             .interact();
 
         match edit_now {
-            Ok(true) => open_editor(&package_blob.file_path, &reporter),
+            Ok(true) => {
+                let success_message = format!(
+                    "Package '{}' created and saved at {}",
+                    package_name,
+                    package_blob.file_path.display()
+                );
+                common::open_editor(&package_blob.file_path, &reporter, Some(success_message))
+            }
             Ok(false) => {
                 reporter.report_info(
                     "Package created. You can edit it later with 'selfie package edit'.",
@@ -315,7 +320,7 @@ fn create_package_interactive(
         };
 
         // Dependencies (get available packages)
-        let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
+        let repo = common::create_package_repository(&config);
         let available_packages = repo.available_packages().unwrap_or_default();
 
         let dependencies = if !available_packages.is_empty() {
@@ -386,43 +391,6 @@ fn create_package_interactive(
         file_path,
         is_new: true,
     })
-}
-
-fn open_editor(file_path: &std::path::Path, reporter: &TerminalProgressReporter) -> i32 {
-    let editor = match std::env::var("EDITOR") {
-        Ok(editor) => editor,
-        Err(_) => {
-            reporter.report_error("EDITOR environment variable is not set.");
-            reporter.report_info(format!(
-                "Package file created at {}. Go ahead and open it in your editor of choice!",
-                file_path.display()
-            ));
-            return 1;
-        }
-    };
-
-    let mut cmd = Command::new(&editor);
-    cmd.arg(file_path);
-
-    // For VS Code, wait for the file to be closed
-    if editor == "code" {
-        cmd.arg("--wait");
-    }
-
-    match cmd.status() {
-        Ok(status) if status.success() => {
-            reporter.report_success("Package file editing completed.");
-            0
-        }
-        Ok(_) => {
-            reporter.report_warning("Editor exited with non-zero status.");
-            1
-        }
-        Err(e) => {
-            reporter.report_error(format!("Failed to start editor '{}': {}", editor, e));
-            1
-        }
-    }
 }
 
 #[cfg(test)]
@@ -510,7 +478,7 @@ mod tests {
         }
 
         let reporter = create_mock_reporter();
-        let result = open_editor(&test_file, &reporter);
+        let result = common::open_editor(&test_file, &reporter, None);
 
         // Should return 1 (error) when EDITOR is not set
         assert_eq!(result, 1);

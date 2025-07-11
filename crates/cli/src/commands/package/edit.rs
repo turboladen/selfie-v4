@@ -1,13 +1,10 @@
 use dialoguer::{Confirm, theme::SimpleTheme};
-use selfie::{
-    config::AppConfig,
-    fs::real::RealFileSystem,
-    package::{port::PackageRepository, repository::yaml::YamlPackageRepository},
-};
-use std::process::Command;
+use selfie::{config::AppConfig, package::port::PackageRepository};
 use tracing::info;
 
 use crate::terminal_progress_reporter::TerminalProgressReporter;
+
+use super::common;
 
 pub(crate) async fn handle_edit(
     package_name: &str,
@@ -17,40 +14,30 @@ pub(crate) async fn handle_edit(
     info!("Editing package: {}", package_name);
 
     // Create repository to look up the package
-    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
+    let repo = common::create_package_repository(config);
 
-    // Check if EDITOR is set first
-    let editor = match std::env::var("EDITOR") {
-        Ok(editor) => editor,
-        Err(_) => {
-            reporter.report_error("EDITOR environment variable is not set.");
+    // Check if package exists first for better error messages
+    let existing_package = repo.get_package(package_name).ok();
+    let package_exists = existing_package.is_some();
+    let package_path = existing_package.as_ref().map(|p| p.file_path.as_path());
 
-            // For existing packages, just tell them where it is
-            if let Ok(existing_package) = repo.get_package(package_name) {
-                reporter.report_info(format!(
-                    "Package '{}' exists at {}. Go ahead and open it in your editor of choice!",
-                    package_name,
-                    existing_package.file_path.display()
-                ));
-            } else {
-                reporter.report_info(format!(
-                    "Package '{}' doesn't exist yet. Set EDITOR and try again to create it.",
-                    package_name
-                ));
-            }
-            return 1;
-        }
-    };
+    // Check if EDITOR is available with context-specific error messages
+    let _editor =
+        match common::check_editor_available(&reporter, package_name, package_exists, package_path)
+        {
+            Some(editor) => editor,
+            None => return 1,
+        };
 
     // Try to get existing package, or create a new one
-    let package_blob = match repo.get_package(package_name) {
-        Ok(pkg) => {
+    let package_blob = match existing_package {
+        Some(pkg) => {
             reporter.report_info(format!(
                 "Opening existing package '{package_name}' for editing"
             ));
             pkg
         }
-        Err(_) => {
+        None => {
             reporter.report_info(format!("Package '{package_name}' does not exist."));
 
             // Prompt user for confirmation before creating
@@ -74,47 +61,27 @@ pub(crate) async fn handle_edit(
             }
 
             reporter.report_info(format!("Creating new package '{package_name}'"));
-            selfie::package::GetPackage::new(package_name, config.package_directory())
+            common::create_new_package(package_name, config)
         }
     };
 
     // Write the package to the file system first
-    if let Err(e) = repo.save_package(&package_blob.package, &package_blob.file_path) {
-        reporter.report_error(format!("Failed to save package file: {e}"));
-        return 1;
+    if let Err(exit_code) = common::save_package(&repo, &package_blob, &reporter) {
+        return exit_code;
     }
 
     // Open the package file in the editor
-    let mut cmd = Command::new(&editor);
-    cmd.arg(&package_blob.file_path);
+    let action = if package_blob.is_new {
+        "created"
+    } else {
+        "updated"
+    };
+    let success_message = format!(
+        "Package '{package_name}' {action} successfully at {}",
+        package_blob.file_path.display()
+    );
 
-    // For VS Code, wait for the file to be closed
-    if editor == "code" {
-        cmd.arg("--wait");
-    }
-
-    match cmd.status() {
-        Ok(status) if status.success() => {
-            let action = if package_blob.is_new {
-                "created"
-            } else {
-                "updated"
-            };
-            reporter.report_success(format!(
-                "Package '{package_name}' {action} successfully at {}",
-                package_blob.file_path.display()
-            ));
-            0
-        }
-        Ok(_) => {
-            reporter.report_warning("Editor exited with non-zero status.");
-            1
-        }
-        Err(e) => {
-            reporter.report_error(format!("Failed to start editor '{editor}': {e}"));
-            1
-        }
-    }
+    common::open_editor(&package_blob.file_path, &reporter, Some(success_message))
 }
 
 #[cfg(test)]
@@ -210,33 +177,18 @@ mod tests {
     #[test]
     fn test_get_package_new_creates_template() {
         let temp_dir = TempDir::new().unwrap();
-        let package_dir = temp_dir.path().join("packages");
+        let config = test_config_with_dir(temp_dir.path());
 
-        let get_package = selfie::package::GetPackage::new("test-template", &package_dir);
+        let get_package = common::create_new_package("test-template", &config);
 
         assert!(get_package.is_new);
         assert_eq!(get_package.package.name(), "test-template");
         assert_eq!(get_package.package.version(), "0.1.0");
-        assert_eq!(get_package.file_path, package_dir.join("test-template.yml"));
-        assert!(get_package.package.environments().contains_key("default"));
-    }
-
-    #[test]
-    fn test_vs_code_wait_flag() {
-        // Test that VS Code gets the --wait flag
-        let editor = "code";
-        let mut cmd = Command::new(&editor);
-        cmd.arg("/tmp/test.yml");
-
-        if editor == "code" {
-            cmd.arg("--wait");
-        }
-
-        let args: Vec<_> = cmd.get_args().collect();
-        assert!(
-            args.iter()
-                .any(|arg| *arg == std::ffi::OsStr::new("--wait"))
+        assert_eq!(
+            get_package.file_path,
+            temp_dir.path().join("test-template.yml")
         );
+        assert!(get_package.package.environments().contains_key("default"));
     }
 
     #[test]
