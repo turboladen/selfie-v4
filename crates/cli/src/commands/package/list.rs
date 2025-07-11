@@ -1,19 +1,12 @@
-use comfy_table::{ContentArrangement, Table, modifiers, presets};
 use console::style;
 use selfie::{
-    commands::ShellCommandRunner,
     config::AppConfig,
-    fs::real::RealFileSystem,
-    package::{
-        event::PackageEvent,
-        repository::YamlPackageRepository,
-        service::{PackageService, PackageServiceImpl},
-    },
+    package::{event::PackageEvent, service::PackageService},
 };
 
-use crate::{
-    event_processor::EventProcessor, terminal_progress_reporter::TerminalProgressReporter,
-};
+use crate::terminal_progress_reporter::TerminalProgressReporter;
+
+use super::common;
 
 pub(crate) struct ListCommand<'a> {
     config: &'a AppConfig,
@@ -28,24 +21,20 @@ impl<'a> ListCommand<'a> {
 
 impl ListCommand<'_> {
     pub(crate) async fn handle_command(&self) -> i32 {
-        // Create the repository and command runner
-        let repo =
-            YamlPackageRepository::new(RealFileSystem, self.config.package_directory().clone());
-        let command_runner = ShellCommandRunner::new("/bin/sh", self.config.command_timeout());
-
         // Create the package service implementation
-        let service = PackageServiceImpl::new(repo, command_runner, self.config.clone());
+        let service = common::create_package_service(self.config);
 
         // Call the service's list method to get an event stream
         match service.list().await {
             Ok(event_stream) => {
                 // Process the event stream with custom handling for structured data
-                let processor = EventProcessor::new(self.reporter);
-                processor
-                    .process_events_with_handler(event_stream, |event, _reporter| {
-                        handle_list_event(event, self.config)
-                    })
-                    .await
+                common::process_events_with_custom_handler(
+                    event_stream,
+                    self.reporter,
+                    handle_list_event,
+                    self.config,
+                )
+                .await
             }
             Err(e) => {
                 self.reporter
@@ -89,7 +78,7 @@ fn display_packages_table(
         return;
     }
 
-    let mut table = create_table();
+    let mut table = common::create_formatted_table();
     table.set_header(vec!["Name", "Version", "Environments"]);
 
     for package in packages {
@@ -105,46 +94,13 @@ fn display_packages_table(
             format!("v{}", package.version)
         };
 
-        let environments = format_environments(&package.environments, config.environment(), config);
+        let environments =
+            common::format_environment_names(&package.environments, config.environment(), config);
 
         table.add_row(vec![package_name, version, environments]);
     }
 
     println!("{table}");
-}
-
-fn create_table() -> Table {
-    let mut table = Table::new();
-    table
-        .load_preset(presets::UTF8_FULL_CONDENSED)
-        .apply_modifier(modifiers::UTF8_ROUND_CORNERS)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    table
-}
-
-fn format_environments(
-    environments: &[String],
-    current_environment: &str,
-    config: &AppConfig,
-) -> String {
-    environments
-        .iter()
-        .map(|env_name| {
-            if env_name == current_environment {
-                let env = format!("*{env_name}");
-                if config.use_colors() {
-                    style(env).bold().green().to_string()
-                } else {
-                    env
-                }
-            } else if config.use_colors() {
-                style(env_name).dim().green().to_string()
-            } else {
-                env_name.to_string()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 #[cfg(test)]
@@ -204,7 +160,7 @@ mod tests {
 
     #[test]
     fn test_create_table() {
-        let table = create_table();
+        let table = common::create_formatted_table();
         // Just test that table creation doesn't panic
         let _table_str = table.to_string();
     }
@@ -214,7 +170,7 @@ mod tests {
         let config = test_config();
         let environments = vec![TEST_ENV.to_string(), ALT_TEST_ENV.to_string()];
 
-        let result = format_environments(&environments, TEST_ENV, &config);
+        let result = common::format_environment_names(&environments, TEST_ENV, &config);
 
         // Just test that it doesn't panic and returns something
         assert!(!result.is_empty());

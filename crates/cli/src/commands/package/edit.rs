@@ -42,7 +42,7 @@ pub(crate) async fn handle_edit(
 
             // Prompt user for confirmation before creating
             let confirm = Confirm::with_theme(&SimpleTheme)
-                .with_prompt(format!("Create new package '{}'?", package_name))
+                .with_prompt(format!("Create new package '{package_name}'?"))
                 .default(false)
                 .interact();
 
@@ -166,7 +166,7 @@ mod tests {
         // Test that we can create a confirmation prompt (without actually running it)
         let package_name = "test-package";
         let confirm = Confirm::with_theme(&SimpleTheme)
-            .with_prompt(format!("Create new package '{}'?", package_name))
+            .with_prompt(format!("Create new package '{package_name}'?"))
             .default(false);
 
         // Just verify we can construct the prompt without panicking

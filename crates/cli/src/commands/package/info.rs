@@ -1,20 +1,16 @@
-use comfy_table::{ContentArrangement, Table, modifiers, presets};
+use comfy_table::Table;
 use console::style;
 use selfie::{
-    commands::ShellCommandRunner,
     config::AppConfig,
-    fs::real::RealFileSystem,
     package::{
         event::{EnvironmentStatus, EnvironmentStatusData, PackageEvent, PackageInfoData},
-        repository::YamlPackageRepository,
-        service::{PackageService, PackageServiceImpl},
+        service::PackageService,
     },
 };
 
-use crate::{
-    event_processor::EventProcessor, formatters::format_key,
-    terminal_progress_reporter::TerminalProgressReporter,
-};
+use crate::{formatters::format_key, terminal_progress_reporter::TerminalProgressReporter};
+
+use super::common;
 
 pub(crate) async fn handle_info(
     package_name: &str,
@@ -23,23 +19,20 @@ pub(crate) async fn handle_info(
 ) -> i32 {
     tracing::debug!("Finding package info for: {}", package_name);
 
-    // Create the repository and command runner
-    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
-    let command_runner = ShellCommandRunner::new("/bin/sh", config.command_timeout());
-
     // Create the package service implementation
-    let service = PackageServiceImpl::new(repo, command_runner, config.clone());
+    let service = common::create_package_service(config);
 
     // Call the service's info method to get an event stream
     match service.info(package_name).await {
         Ok(event_stream) => {
             // Process the event stream with custom handling for structured data
-            let processor = EventProcessor::new(reporter);
-            processor
-                .process_events_with_handler(event_stream, |event, _reporter| {
-                    handle_info_event(event, config)
-                })
-                .await
+            common::process_events_with_custom_handler(
+                event_stream,
+                reporter,
+                handle_info_event,
+                config,
+            )
+            .await
         }
         Err(e) => {
             reporter.report_error(format!("Failed to get package info: {e}"));
@@ -67,18 +60,13 @@ fn handle_info_event(event: &PackageEvent, config: &AppConfig) -> Option<bool> {
 }
 
 fn create_package_info_table(package_info: &PackageInfoData, config: &AppConfig) -> Table {
-    let mut table = create_table();
+    let mut table = common::create_formatted_table();
 
     // Helper functions for formatting
     let format_key_fn = |name: &str| -> String { format_key(name, config.use_colors()) };
 
-    let format_value = |value: &str| -> String {
-        if config.use_colors() {
-            style(value).white().to_string()
-        } else {
-            value.to_string()
-        }
-    };
+    let format_value =
+        |value: &str| -> String { common::format_field_value(value, config.use_colors()) };
 
     // Add the basic package info rows
     table.add_row(vec![
@@ -104,7 +92,7 @@ fn create_package_info_table(package_info: &PackageInfoData, config: &AppConfig)
     }
 
     // Format the environment names as a comma-separated list
-    let env_names = format_environment_names(
+    let env_names = common::format_environment_names(
         &package_info.environments,
         &package_info.current_environment,
         config,
@@ -118,7 +106,7 @@ fn create_package_info_table(package_info: &PackageInfoData, config: &AppConfig)
 }
 
 fn create_environment_table(env_status: &EnvironmentStatusData, config: &AppConfig) -> Table {
-    let mut env_table = create_table();
+    let mut env_table = common::create_formatted_table();
 
     // Create a header for the environment table
     let env_header = if env_status.is_current {
@@ -141,21 +129,11 @@ fn create_environment_table(env_status: &EnvironmentStatusData, config: &AppConf
     env_table.set_header(vec![env_header, String::new()]);
 
     // Format environment detail keys
-    let format_env_key = |key: &str| -> String {
-        if config.use_colors() {
-            style(key).magenta().to_string()
-        } else {
-            key.to_string()
-        }
-    };
+    let format_env_key =
+        |key: &str| -> String { common::format_field_key(key, config.use_colors()) };
 
-    let format_env_value = |value: &str| -> String {
-        if config.use_colors() {
-            style(value).white().to_string()
-        } else {
-            value.to_string()
-        }
-    };
+    let format_env_value =
+        |value: &str| -> String { common::format_field_value(value, config.use_colors()) };
 
     // Add installation status if this is the current environment and we have status
     if env_status.is_current {
@@ -183,37 +161,6 @@ fn create_environment_table(env_status: &EnvironmentStatusData, config: &AppConf
     }
 
     env_table
-}
-
-fn create_table() -> Table {
-    let mut table = Table::new();
-    table
-        .load_preset(presets::UTF8_FULL_CONDENSED)
-        .apply_modifier(modifiers::UTF8_ROUND_CORNERS)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    table
-}
-
-fn format_environment_names(
-    environments: &[String],
-    current_environment: &str,
-    config: &AppConfig,
-) -> String {
-    environments
-        .iter()
-        .map(|name| {
-            if name == current_environment {
-                if config.use_colors() {
-                    format!("{}", style(format!("*{name}")).green().bold())
-                } else {
-                    format!("*{name}")
-                }
-            } else {
-                name.to_string()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 fn format_status(status: &EnvironmentStatus, use_colors: bool) -> String {
@@ -320,14 +267,14 @@ mod tests {
     fn test_format_environment_names() {
         let config = test_config();
         let environments = vec![TEST_ENV.to_string(), ALT_TEST_ENV.to_string()];
-        let result = format_environment_names(&environments, TEST_ENV, &config);
+        let result = common::format_environment_names(&environments, TEST_ENV, &config);
         // Just test that it doesn't panic
         assert!(!result.is_empty());
     }
 
     #[test]
     fn test_create_table() {
-        let table = create_table();
+        let table = common::create_formatted_table();
         // Just test that table creation doesn't panic
         let _table_str = table.to_string();
     }

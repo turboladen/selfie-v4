@@ -1,12 +1,10 @@
 use dialoguer::{Confirm, theme::SimpleTheme};
-use selfie::{
-    config::AppConfig,
-    fs::real::RealFileSystem,
-    package::{port::PackageRepository, repository::yaml::YamlPackageRepository},
-};
+use selfie::{config::AppConfig, package::port::PackageRepository};
 use tracing::info;
 
 use crate::terminal_progress_reporter::TerminalProgressReporter;
+
+use super::common;
 
 pub(crate) async fn handle_remove(
     package_name: &str,
@@ -16,7 +14,7 @@ pub(crate) async fn handle_remove(
     info!("Removing package: {}", package_name);
 
     // Create repository to interact with packages
-    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
+    let repo = common::create_package_repository(config);
 
     // First, verify the package exists and get its details
     let package_blob = match repo.get_package(package_name) {
@@ -177,7 +175,8 @@ environments:
         )
         .unwrap();
 
-        let repo = YamlPackageRepository::new(RealFileSystem, package_dir);
+        let repo =
+            common::create_package_repository(&test_common::test_config_with_dir(&package_dir));
 
         // Test the repository method directly
         let dependents = repo.find_dependent_packages("target-package").unwrap();

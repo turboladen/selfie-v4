@@ -71,7 +71,11 @@ this would be via `package create` and `package edit` commands.
 - [ ] Add running `package install`
   - [ ] Run `check` before install
   - [ ] Run `install`
-  - [ ] Do this for all package dependencies
+
+### Phase 8: Package Installation: Dependency Resolution
+
+- [ ] Build a dependency graph
+- [ ] Install dependencies of a package before installing the package
 
 ---
 
