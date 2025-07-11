@@ -7,6 +7,7 @@
 use std::{
     io,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use thiserror::Error;
@@ -37,6 +38,42 @@ pub trait FileSystem: Send + Sync {
     /// - The file content is not valid UTF-8
     /// - Any other IO error occurs during reading
     fn read_file(&self, path: &Path) -> Result<String, FileSystemError>;
+
+    /// Write data to a file
+    ///
+    /// Writes the provided data to the specified file path, creating the file
+    /// if it doesn't exist or overwriting it if it does. Creates any necessary
+    /// parent directories.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path where the file should be written
+    /// * `data` - Data to write to the file
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FileSystemError`] if:
+    /// - Permission is denied to write to the file or directory
+    /// - The parent directory cannot be created
+    /// - Any other IO error occurs during writing
+    fn write_file(&self, path: &Path, data: &[u8]) -> Result<(), FileSystemError>;
+
+    /// Remove a file from the file system
+    ///
+    /// Deletes the file at the specified path. This operation is irreversible.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the file to remove
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FileSystemError`] if:
+    /// - The file does not exist
+    /// - Permission is denied to delete the file
+    /// - The path points to a directory instead of a file
+    /// - Any other IO error occurs during deletion
+    fn remove_file(&self, path: &Path) -> Result<(), FileSystemError>;
 
     /// Check if a path exists
     ///
@@ -127,11 +164,11 @@ pub trait FileSystem: Send + Sync {
 ///
 /// Represents all possible failure modes when interacting with the file system,
 /// providing detailed context for debugging and error handling.
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum FileSystemError {
     /// General IO error occurred during file system operation
     #[error("IO error: {0}")]
-    IoError(#[from] io::Error),
+    IoError(Arc<io::Error>),
 
     /// Home directory could not be determined (needed for path expansion)
     #[error("Home directory not found")]
@@ -238,6 +275,45 @@ impl MockFileSystem {
         self.mock_read_file(&config_path, config_yaml);
 
         self.mock_path_exists(&config_dir.join("config.yml"), false);
+    }
+
+    /// Set up a mock for writing a file
+    ///
+    /// Configures the mock to succeed when writing to the specified path.
+    /// This is useful for testing package saving operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path where the write should succeed
+    pub(crate) fn mock_write_file<P>(&mut self, path: P)
+    where
+        PathBuf: From<P>,
+    {
+        let path_buf = PathBuf::from(path);
+        self.expect_write_file()
+            .with(
+                mockall::predicate::eq(path_buf),
+                mockall::predicate::always(),
+            )
+            .returning(|_, _| Ok(()));
+    }
+
+    /// Set up a mock for removing a file
+    ///
+    /// Configures the mock to succeed when removing the specified file.
+    /// This is useful for testing package removal operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path where the file removal should succeed
+    pub(crate) fn mock_remove_file<P>(&mut self, path: P)
+    where
+        PathBuf: From<P>,
+    {
+        let path_buf = PathBuf::from(path);
+        self.expect_remove_file()
+            .with(mockall::predicate::eq(path_buf))
+            .returning(|_| Ok(()));
     }
 
     /// Set up a mock for path expansion

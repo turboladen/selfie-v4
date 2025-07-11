@@ -29,7 +29,7 @@ where
     // Step 1: Fetch package
     progress.next(sender, "Loading package definition").await;
 
-    let package = match repo.get_package(package_name) {
+    let package_blob = match repo.get_package(package_name) {
         Ok(pkg) => {
             sender
                 .send_debug(format!("Successfully loaded package: {package_name}"))
@@ -46,7 +46,7 @@ where
     // Step 2: Validate the package for the current environment
     progress.next(sender, "Validating package definition").await;
 
-    let validation_result = package.validate(config.environment());
+    let validation_result = package_blob.package.validate(config.environment());
     let issues = validation_result.issues();
 
     // Step 3: Process validation results

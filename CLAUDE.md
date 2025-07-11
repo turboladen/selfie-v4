@@ -105,10 +105,16 @@ that's too complicated and too much to maintain.
 `selfie` provides means for listing all packages that it knows about. Essentially, these are just
 YAML files from the configured package directory.
 
-#### Package Info
+#### Package Create, Edit, Info, Remove
+
+`selfie` provides means for programmatically creating, editing, and removing a package file (in the
+configured `package_directory`). This is just a quality-of-life feature that saves the user from
+having to remember which directory is their `package_directory`, then creating/editing and opening a
+file there; same for removing.
 
 `selfie` provides means for getting information about a package. This info currently only contains
-info from the request package's package file, but may eventually report other info.
+info from the request package's package file, as well as if it's already on the system, but may
+eventually report other info.
 
 ### Environments
 

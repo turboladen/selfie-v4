@@ -112,8 +112,15 @@ async fn dispatch_package_command(
         PackageSubcommands::Info { package_name } => {
             package::info::handle_info(package_name, config, reporter).await
         }
-        PackageSubcommands::Create { package_name } => {
-            package::create::handle_create(package_name, config, reporter)
+        PackageSubcommands::Create {
+            package_name,
+            interactive,
+        } => package::create::handle_create(package_name, config, reporter, *interactive).await,
+        PackageSubcommands::Edit { package_name } => {
+            package::edit::handle_edit(package_name, config, reporter).await
+        }
+        PackageSubcommands::Remove { package_name } => {
+            package::remove::handle_remove(package_name, config, reporter).await
         }
         PackageSubcommands::Validate { package_name } => {
             package::validate::handle_validate(package_name, config, reporter).await

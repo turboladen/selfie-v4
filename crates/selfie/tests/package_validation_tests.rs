@@ -34,7 +34,7 @@ environments:
     let repo = YamlPackageRepository::new(fs, repo_path.clone());
 
     let package = repo.get_package("test-package").unwrap();
-    let validation = package.validate("test-env");
+    let validation = package.package.validate("test-env");
 
     // Should find at least one error with command syntax
     assert!(validation.issues().has_errors());
@@ -74,7 +74,7 @@ environments:
     let repo = YamlPackageRepository::new(fs, repo_path.clone());
 
     let package = repo.get_package("test-package").unwrap();
-    let validation = package.validate("test-env");
+    let validation = package.package.validate("test-env");
 
     // Should find URL format error
     let url_errors = validation

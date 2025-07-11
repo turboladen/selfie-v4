@@ -11,7 +11,10 @@ use std::{
 };
 use thiserror::Error;
 
-use crate::package::Package;
+use crate::{
+    fs::filesystem::FileSystemError,
+    package::{GetPackage, Package},
+};
 
 /// Port for package repository operations (Hexagonal Architecture)
 ///
@@ -48,7 +51,7 @@ pub trait PackageRepository: Send + Sync {
     /// - Multiple packages with the same name are found
     /// - The package definition file is malformed
     /// - File system access fails
-    fn get_package(&self, name: &str) -> Result<Package, PackageRepoError>;
+    fn get_package(&self, name: &str) -> Result<GetPackage, PackageRepoError>;
 
     /// List all available packages in the package directory
     ///
@@ -93,9 +96,9 @@ pub trait PackageRepository: Send + Sync {
 
     /// Find package files that match the given name
     ///
-    /// Searches for package definition files (with various extensions like .yml, .yaml)
-    /// that correspond to the given package name. This is useful for package
-    /// discovery and resolving ambiguities when multiple files might match.
+    /// Searches for package definition files that correspond to the given
+    /// package name. This is useful for package discovery and resolving
+    /// ambiguities when multiple files might match.
     ///
     /// # Arguments
     ///
@@ -111,6 +114,74 @@ pub trait PackageRepository: Send + Sync {
     /// - The package directory cannot be accessed
     /// - File system operations fail
     fn find_package_files(&self, name: &str) -> Result<Vec<PathBuf>, PackageListError>;
+
+    /// Save a package to the specified file path
+    ///
+    /// Serializes the package and writes it to the given path. This method
+    /// handles all file system operations through the repository's abstraction
+    /// layer, enabling proper testing and mocking.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - The package to save
+    /// * `path` - The file path where the package should be saved
+    ///
+    /// # Returns
+    ///
+    /// Success if the package was saved successfully
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PackageRepoError`] if:
+    /// - The package cannot be serialized to YAML
+    /// - The target directory doesn't exist or isn't writable
+    /// - File system operations fail
+    fn save_package(&self, package: &Package, path: &Path) -> Result<(), PackageRepoError>;
+
+    /// Remove a package from the repository
+    ///
+    /// Deletes the package definition file from the file system. This operation
+    /// is irreversible and should only be performed after appropriate user confirmation.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Name of the package to remove
+    ///
+    /// # Returns
+    ///
+    /// Success if the package was removed successfully
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PackageRepoError`] if:
+    /// - The package does not exist
+    /// - Permission is denied to delete the file
+    /// - File system operations fail
+    fn remove_package(&self, name: &str) -> Result<(), PackageRepoError>;
+
+    /// Find packages that depend on the specified target package
+    ///
+    /// Searches through all packages in the repository to identify which ones
+    /// list the target package as a dependency in any of their environments.
+    /// This is useful for dependency analysis before removing packages.
+    ///
+    /// # Arguments
+    ///
+    /// * `target_package` - Name of the package to find dependents for
+    ///
+    /// # Returns
+    ///
+    /// A vector of packages that depend on the target package
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PackageRepoError`] if:
+    /// - The package listing operation fails
+    /// - File system access fails
+    fn find_dependent_packages(
+        &self,
+        target_package: &str,
+    ) -> Result<Vec<Package>, PackageRepoError>;
 }
 
 /// Errors that can occur during package repository operations
@@ -131,6 +202,10 @@ pub enum PackageRepoError {
     /// IO error during repository operation
     #[error("IO error: {0}")]
     IoError(#[from] Arc<std::io::Error>),
+
+    /// File system error during repository operation
+    #[error("File system error: {0}")]
+    FileSystemError(#[from] FileSystemError),
 }
 
 /// Errors that can occur when listing packages
@@ -321,6 +396,124 @@ impl PackageParseError {
             PackageParseError::YamlParse { package_path, .. } => package_path,
             PackageParseError::IoError { package_path, .. } => package_path,
             PackageParseError::FileSystemError { package_path, .. } => package_path,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockall::predicate::*;
+
+    #[test]
+    fn test_mock_find_dependent_packages() {
+        // Test that the new find_dependent_packages method can be mocked
+        let mut mock_repo = MockPackageRepository::new();
+
+        // Set up expectations
+        mock_repo
+            .expect_find_dependent_packages()
+            .with(eq("target-package"))
+            .times(1)
+            .returning(|_| {
+                use crate::package::Package;
+
+                use std::path::PathBuf;
+
+                let mut env1 = std::collections::HashMap::new();
+                env1.insert(
+                    "test".to_string(),
+                    crate::package::EnvironmentConfig::new(
+                        "echo install".to_string(),
+                        None,
+                        vec!["target-package".to_string()],
+                    ),
+                );
+
+                let mut env2 = std::collections::HashMap::new();
+                env2.insert(
+                    "test".to_string(),
+                    crate::package::EnvironmentConfig::new(
+                        "echo install".to_string(),
+                        None,
+                        vec!["target-package".to_string()],
+                    ),
+                );
+
+                Ok(vec![
+                    Package::new(
+                        "dependent1".to_string(),
+                        "1.0.0".to_string(),
+                        None,
+                        None,
+                        env1,
+                        PathBuf::from("/test/dependent1.yml"),
+                    ),
+                    Package::new(
+                        "dependent2".to_string(),
+                        "1.0.0".to_string(),
+                        None,
+                        None,
+                        env2,
+                        PathBuf::from("/test/dependent2.yml"),
+                    ),
+                ])
+            });
+
+        // Call the mocked method
+        let result = mock_repo.find_dependent_packages("target-package");
+
+        // Verify the result
+        assert!(result.is_ok());
+        let dependents = result.unwrap();
+        assert_eq!(dependents.len(), 2);
+
+        let names: Vec<String> = dependents.iter().map(|p| p.name().to_string()).collect();
+        assert!(names.contains(&"dependent1".to_string()));
+        assert!(names.contains(&"dependent2".to_string()));
+    }
+
+    #[test]
+    fn test_mock_find_dependent_packages_empty() {
+        // Test mocking when no dependents are found
+        let mut mock_repo = MockPackageRepository::new();
+
+        mock_repo
+            .expect_find_dependent_packages()
+            .with(eq("standalone-package"))
+            .times(1)
+            .returning(|_| Ok(vec![]));
+
+        let result = mock_repo.find_dependent_packages("standalone-package");
+
+        assert!(result.is_ok());
+        let dependents = result.unwrap();
+        assert!(dependents.is_empty());
+    }
+
+    #[test]
+    fn test_mock_find_dependent_packages_error() {
+        // Test mocking error conditions
+        let mut mock_repo = MockPackageRepository::new();
+
+        mock_repo
+            .expect_find_dependent_packages()
+            .with(eq("error-package"))
+            .times(1)
+            .returning(|_| {
+                Err(PackageRepoError::PackageListError(
+                    PackageListError::PackageDirectoryNotFound(PathBuf::from("/nonexistent")),
+                ))
+            });
+
+        let result = mock_repo.find_dependent_packages("error-package");
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            PackageRepoError::PackageListError(PackageListError::PackageDirectoryNotFound(_)) => {
+                // Expected error type
+            }
+            _ => panic!("Expected PackageDirectoryNotFound error"),
         }
     }
 }

@@ -12,6 +12,61 @@ use std::{collections::HashMap, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+/// Package data for editing operations
+///
+/// Contains a package and its file metadata for editing workflows.
+/// Can represent either an existing package loaded from the repository
+/// or a new package template ready for creation.
+#[derive(Debug, Clone)]
+pub struct GetPackage {
+    /// The package content (either loaded or template)
+    pub package: Package,
+    /// The file path where the package is/should be stored
+    pub file_path: PathBuf,
+    /// Whether this is a new package (true) or existing (false)
+    pub is_new: bool,
+}
+
+impl GetPackage {
+    /// Create a new package template for the given name and directory
+    ///
+    /// This creates a basic package template with minimal configuration
+    /// that can be used as a starting point for new packages.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The package name
+    /// * `packages_directory` - The directory where package files are stored
+    #[must_use]
+    pub fn new(name: &str, packages_directory: &std::path::Path) -> Self {
+        let file_path = packages_directory.join(format!("{name}.yml"));
+        let package = Package::new_template(name);
+
+        Self {
+            package,
+            file_path,
+            is_new: true,
+        }
+    }
+
+    /// Create a `GetPackage` from an existing package and file path
+    ///
+    /// This is used when loading existing packages from the repository.
+    ///
+    /// # Arguments
+    ///
+    /// * `package` - The loaded package
+    /// * `file_path` - The path where the package file is stored
+    #[must_use]
+    pub fn from_existing(package: Package, file_path: PathBuf) -> Self {
+        Self {
+            package,
+            file_path,
+            is_new: false,
+        }
+    }
+}
+
 /// Core package entity representing a package definition
 ///
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -23,11 +78,11 @@ pub struct Package {
     pub(crate) version: String,
 
     /// Optional homepage URL
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) homepage: Option<String>,
 
     /// Optional package description
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) description: Option<String>,
 
     /// Map of environment configurations
@@ -46,7 +101,7 @@ pub struct EnvironmentConfig {
     pub(crate) install: String,
 
     /// Optional command to check if the package is already installed
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) check: Option<String>,
 
     /// Dependencies that must be installed before this package
@@ -55,6 +110,16 @@ pub struct EnvironmentConfig {
 }
 
 impl EnvironmentConfig {
+    /// Create a new environment configuration
+    #[must_use]
+    pub fn new(install: String, check: Option<String>, dependencies: Vec<String>) -> Self {
+        Self {
+            install,
+            check,
+            dependencies,
+        }
+    }
+
     #[must_use]
     pub fn install(&self) -> &str {
         &self.install
@@ -89,6 +154,36 @@ impl Package {
             description,
             environments,
             path,
+        }
+    }
+
+    /// Create a basic package template
+    ///
+    /// Creates a minimal package template suitable for new packages.
+    /// The template includes basic metadata and a placeholder environment.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The package name
+    #[must_use]
+    pub fn new_template(name: &str) -> Self {
+        let mut environments = HashMap::new();
+        environments.insert(
+            "default".to_string(),
+            EnvironmentConfig {
+                install: format!("# TODO: Add install command for {name}"),
+                check: Some(format!("# TODO: Add check command for {name}")),
+                dependencies: Vec::new(),
+            },
+        );
+
+        Self {
+            name: name.to_string(),
+            version: "0.1.0".to_string(),
+            homepage: None,
+            description: None,
+            environments,
+            path: PathBuf::new(), // Will be set by GetPackage::new
         }
     }
 

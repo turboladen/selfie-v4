@@ -43,7 +43,7 @@ pub struct ClapCli {
     /// Override the package directory from configuration file
     ///
     /// Specifies the directory where package definition files are located.
-    /// This overrides the package_directory setting in the config file.
+    /// This overrides the `package_directory` setting in the config file.
     ///
     /// Example: --package-directory=/path/to/packages
     #[clap(long, short = 'p', global = true)]
@@ -168,6 +168,43 @@ pub(crate) enum PackageSubcommands {
         ///
         /// This will be used as the filename for the package definition.
         /// The package name should be unique within the package directory.
+        package_name: String,
+
+        /// Enable interactive mode for package creation
+        ///
+        /// Walks through prompts to configure package details like version,
+        /// description, environments, and dependencies interactively.
+        #[arg(short, long)]
+        interactive: bool,
+    },
+
+    /// Edit a package definition file
+    ///
+    /// Opens an existing package definition file for editing, or creates a new one
+    /// if it doesn't exist. Uses the editor specified in the EDITOR environment
+    /// variable, with fallbacks to common editors like VS Code, vim, or nano.
+    ///
+    /// Example: `selfie package edit my-tool`
+    Edit {
+        /// Name of the package to edit or create
+        ///
+        /// If the package exists, it will be opened for editing.
+        /// If it doesn't exist, a new template will be created and opened.
+        package_name: String,
+    },
+
+    /// Remove a package definition file
+    ///
+    /// Permanently removes a package definition file from the package directory.
+    /// This operation requires confirmation and will warn if the package is a
+    /// dependency of other packages.
+    ///
+    /// Example: `selfie package remove my-tool`
+    Remove {
+        /// Name of the package to remove
+        ///
+        /// The package definition file will be permanently deleted from the
+        /// package directory. This operation cannot be undone.
         package_name: String,
     },
 

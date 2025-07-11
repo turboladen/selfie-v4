@@ -26,7 +26,7 @@ where
     CR: CommandRunner,
 {
     // Step 1: Fetch package (reusing shared step)
-    let package = match steps::fetch_package(repo, package_name, sender, progress).await {
+    let package_blob = match steps::fetch_package(repo, package_name, sender, progress).await {
         Ok(pkg) => pkg,
         Err(err) => {
             let error_msg = format!("Failed to fetch package '{package_name}': {err}");
@@ -36,7 +36,7 @@ where
 
     // Step 2: Find environment configuration (reusing shared step)
     let env_config = match steps::find_environment_config(
-        &package,
+        &package_blob.package,
         config.environment(),
         sender,
         progress,

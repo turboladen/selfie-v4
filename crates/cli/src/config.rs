@@ -46,7 +46,7 @@ impl ApplyToConfg for ClapCli {
     /// - `--environment`: Overrides the target environment
     /// - `--package-directory`: Overrides the package directory path
     /// - `--verbose`: Overrides the verbosity setting
-    /// - `--no-color`: Disables colored output (overrides use_colors setting)
+    /// - `--no-color`: Disables colored output (overrides `use_colors` setting)
     fn apply_to_config(&self, mut config: AppConfig) -> AppConfig {
         // Override environment if specified via CLI
         if let Some(env) = self.environment.as_ref() {
