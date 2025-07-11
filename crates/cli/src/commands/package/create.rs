@@ -7,10 +7,18 @@ use selfie::{
         repository::yaml::YamlPackageRepository,
     },
 };
-use std::{collections::HashMap, process::Command};
+use std::{collections::HashMap, path::PathBuf, process::Command};
 use tracing::info;
 
 use crate::terminal_progress_reporter::TerminalProgressReporter;
+
+const MAX_NAME_RETRIES: usize = 3;
+
+enum PackageNameResult {
+    CreateNew(String),     // Use this name to create a new package
+    EditExisting(PathBuf), // User wants to edit the existing package at this path
+    Cancelled,             // User cancelled the operation
+}
 
 pub(crate) async fn handle_create(
     package_name: &str,
@@ -18,14 +26,85 @@ pub(crate) async fn handle_create(
     reporter: TerminalProgressReporter,
     interactive: bool,
 ) -> i32 {
-    let mut current_name = package_name.to_string();
+    info!("Creating package: {}", package_name);
+
+    // Create repository
+    let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
+
+    // Get a valid package name or handle existing package scenarios
+    let package_name = match get_valid_package_name(package_name, &repo, &reporter) {
+        Ok(PackageNameResult::CreateNew(name)) => name,
+        Ok(PackageNameResult::EditExisting(path)) => {
+            reporter.report_info(format!(
+                "Opening existing package for editing at {}",
+                path.display()
+            ));
+            return open_editor(&path, &reporter);
+        }
+        Ok(PackageNameResult::Cancelled) => {
+            reporter.report_info("Package creation cancelled.");
+            return 0;
+        }
+        Err(exit_code) => return exit_code,
+    };
+
+    // Create new package
+    let package_blob = if interactive {
+        match create_package_interactive(&package_name, config, &reporter) {
+            Ok(blob) => blob,
+            Err(exit_code) => return exit_code,
+        }
+    } else {
+        create_basic_package(&package_name, config)
+    };
+
+    // Save package to file
+    if let Err(e) = repo.save_package(&package_blob.package, &package_blob.file_path) {
+        reporter.report_error(format!("Failed to save package file: {e}"));
+        return 1;
+    }
+
+    reporter.report_success(format!(
+        "Package '{}' created successfully at {}",
+        package_name,
+        package_blob.file_path.display()
+    ));
+
+    // Ask if user wants to edit the file (only in interactive mode)
+    if interactive {
+        let edit_now = Confirm::with_theme(&SimpleTheme)
+            .with_prompt("Would you like to open the package file for editing now?")
+            .default(true)
+            .interact();
+
+        match edit_now {
+            Ok(true) => open_editor(&package_blob.file_path, &reporter),
+            Ok(false) => {
+                reporter.report_info(
+                    "Package created. You can edit it later with 'selfie package edit'.",
+                );
+                0
+            }
+            Err(_) => {
+                reporter.report_error("Failed to read user input.");
+                1
+            }
+        }
+    } else {
+        reporter.report_info("Package created. Use 'selfie package edit' to customize it.");
+        0
+    }
+}
+
+fn get_valid_package_name(
+    initial_name: &str,
+    repo: &impl PackageRepository,
+    reporter: &TerminalProgressReporter,
+) -> Result<PackageNameResult, i32> {
+    let mut current_name = initial_name.to_string();
+    let mut retry_count = 0;
 
     loop {
-        info!("Creating package: {}", current_name);
-
-        // Create repository to check if package already exists
-        let repo = YamlPackageRepository::new(RealFileSystem, config.package_directory().clone());
-
         // Check if package already exists
         if let Ok(existing_package) = repo.get_package(&current_name) {
             reporter.report_info(format!("Package '{}' already exists.", current_name));
@@ -43,80 +122,43 @@ pub(crate) async fn handle_create(
             match action {
                 Ok(0) => {
                     // Edit existing package
-                    reporter.report_info(format!(
-                        "Opening existing package for editing at {}",
-                        existing_package.file_path.display()
-                    ));
-                    return open_editor(&existing_package.file_path, &reporter);
+                    return Ok(PackageNameResult::EditExisting(existing_package.file_path));
                 }
                 Ok(1) => {
                     // Create with different name
+                    retry_count += 1;
+                    if retry_count > MAX_NAME_RETRIES {
+                        reporter.report_error(format!(
+                            "Too many retry attempts ({}). Please try again later.",
+                            MAX_NAME_RETRIES
+                        ));
+                        return Err(1);
+                    }
+
                     let new_name: String = match Input::with_theme(&SimpleTheme)
-                        .with_prompt("Enter a new package name")
+                        .with_prompt(format!(
+                            "Enter a new package name (attempt {}/{})",
+                            retry_count, MAX_NAME_RETRIES
+                        ))
                         .interact()
                     {
                         Ok(name) => name,
                         Err(_) => {
                             reporter.report_error("Failed to read package name.");
-                            return 1;
+                            return Err(1);
                         }
                     };
                     current_name = new_name;
                     continue; // Loop back to check the new name
                 }
                 _ => {
-                    reporter.report_info("Package creation cancelled.");
-                    return 0;
+                    // Cancel
+                    return Ok(PackageNameResult::Cancelled);
                 }
             }
-        }
-
-        // Create new package
-        let package_blob = if interactive {
-            match create_package_interactive(&current_name, config, &reporter) {
-                Ok(blob) => blob,
-                Err(exit_code) => return exit_code,
-            }
         } else {
-            create_basic_package(&current_name, config)
-        };
-
-        // Save package to file
-        if let Err(e) = repo.save_package(&package_blob.package, &package_blob.file_path) {
-            reporter.report_error(format!("Failed to save package file: {e}"));
-            return 1;
-        }
-
-        reporter.report_success(format!(
-            "Package '{}' created successfully at {}",
-            current_name,
-            package_blob.file_path.display()
-        ));
-
-        // Ask if user wants to edit the file (only in interactive mode)
-        if interactive {
-            let edit_now = Confirm::with_theme(&SimpleTheme)
-                .with_prompt("Would you like to open the package file for editing now?")
-                .default(true)
-                .interact();
-
-            return match edit_now {
-                Ok(true) => open_editor(&package_blob.file_path, &reporter),
-                Ok(false) => {
-                    reporter.report_info(
-                        "Package created. You can edit it later with 'selfie package edit'.",
-                    );
-                    0
-                }
-                Err(_) => {
-                    reporter.report_error("Failed to read user input.");
-                    1
-                }
-            };
-        } else {
-            // Non-interactive mode: just create the package and exit
-            reporter.report_info("Package created. Use 'selfie package edit' to customize it.");
-            return 0;
+            // Package doesn't exist, we can use this name
+            return Ok(PackageNameResult::CreateNew(current_name));
         }
     }
 }
@@ -573,5 +615,37 @@ mod tests {
         assert!(content.contains("production:"));
         assert!(!content.contains("default:"));
         assert!(!content.contains("macos:"));
+    }
+
+    #[test]
+    fn test_max_name_retries_constant() {
+        // Ensure the retry limit is reasonable
+        assert!(MAX_NAME_RETRIES > 0);
+        assert!(MAX_NAME_RETRIES <= 5); // Don't allow too many retries
+        assert_eq!(MAX_NAME_RETRIES, 3); // Verify the exact value we set
+    }
+
+    #[test]
+    fn test_get_valid_package_name_logic() {
+        // Test the logic flow without interactive components
+        // Since get_valid_package_name involves interactive prompts,
+        // we test the integration through handle_create instead
+        let temp_dir = TempDir::new().unwrap();
+        let package_dir = temp_dir.path().join("packages");
+        fs::create_dir_all(&package_dir).unwrap();
+
+        let config = test_common::config::test_config_with_dir(&package_dir);
+        let reporter = create_mock_reporter();
+
+        // Test creating a new package (name doesn't exist)
+        let result = tokio_test::block_on(async {
+            handle_create("new-unique-name", &config, reporter, false).await
+        });
+
+        assert_eq!(result, 0);
+
+        // Verify the package was created
+        let package_file = package_dir.join("new-unique-name.yml");
+        assert!(package_file.exists());
     }
 }

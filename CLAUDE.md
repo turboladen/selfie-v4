@@ -110,11 +110,12 @@ YAML files from the configured package directory.
 `selfie` provides means for getting information about a package. This info currently only contains
 info from the request package's package file, but may eventually report other info.
 
-#### Package Create
+#### Package Create, Edit, Remove
 
-`selfie` provides means for programmatically creating a new package file (in the configured
-`package_directory`). This is just a quality-of-life feature that saves the user from having to
-remember which directory is their `package_directory`, then creating and opening a file there.
+`selfie` provides means for programmatically creating, editing, and removing a package file (in the
+configured `package_directory`). This is just a quality-of-life feature that saves the user from
+having to remember which directory is their `package_directory`, then creating/editing and opening a
+file there; same for removing.
 
 ### Environments
 
