@@ -1,6 +1,6 @@
 //! Shell command runner adapter implementation
 //!
-//! This module provides a concrete implementation of the CommandRunner trait
+//! This module provides a concrete implementation of the `CommandRunner` trait
 //! that executes commands through a system shell. It supports both blocking
 //! and streaming execution modes with configurable timeouts.
 

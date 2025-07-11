@@ -80,7 +80,7 @@ mod tests {
         let error = CommandError::NonZeroExit {
             command: "false".to_string(),
             exit_code: 1,
-            stdout: "".to_string(),
+            stdout: String::new(),
             stderr: "Command failed".to_string(),
             working_directory: PathBuf::from("/home/user"),
             execution_duration: Duration::from_millis(500),

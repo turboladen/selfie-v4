@@ -17,32 +17,35 @@ pub(crate) async fn handle_remove(
     let repo = common::create_package_repository(config);
 
     // First, verify the package exists and get its details
-    let package_blob = match repo.get_package(package_name) {
-        Ok(blob) => blob,
-        Err(_) => {
-            reporter.report_error(format!("Package '{}' not found.", package_name));
-            return 1;
-        }
+    let package_blob = if let Ok(blob) = repo.get_package(package_name) {
+        blob
+    } else {
+        reporter.report_error(format!("Package '{package_name}' not found."));
+        return 1;
     };
 
     // Show package location
-    reporter.report_info(format!("Package '{}' found at:", package_name));
+    reporter.report_info(format!("Package '{package_name}' found at:"));
     reporter.report_info(format!("  {}", package_blob.file_path.display()));
 
     // Check if this package is a dependency of others
     let dependent_packages = match repo.find_dependent_packages(package_name) {
         Ok(deps) => deps,
         Err(e) => {
-            reporter.report_warning(format!("Could not check for dependent packages: {}", e));
+            reporter.report_warning(format!("Could not check for dependent packages: {e}"));
             Vec::new()
         }
     };
 
     // Build confirmation prompt based on dependencies
-    let (prompt, default_answer) = if !dependent_packages.is_empty() {
+    let (prompt, default_answer) = if dependent_packages.is_empty() {
+        reporter.report_info(format!(
+            "✓ Package '{package_name}' is not a dependency of any other packages."
+        ));
+        (format!("Remove package '{package_name}'?"), false)
+    } else {
         reporter.report_warning(format!(
-            "Package '{}' is a dependency of the following packages:",
-            package_name
+            "Package '{package_name}' is a dependency of the following packages:"
         ));
         for dep in &dependent_packages {
             reporter.report_warning(format!("  - {}", dep.name()));
@@ -51,12 +54,6 @@ pub(crate) async fn handle_remove(
             "Are you sure you want to remove this package?".to_string(),
             false,
         )
-    } else {
-        reporter.report_info(format!(
-            "✓ Package '{}' is not a dependency of any other packages.",
-            package_name
-        ));
-        (format!("Remove package '{}'?", package_name), false)
     };
 
     // Single confirmation prompt
@@ -83,10 +80,7 @@ pub(crate) async fn handle_remove(
 
     // Perform the actual removal
     if let Err(e) = repo.remove_package(package_name) {
-        reporter.report_error(format!(
-            "Failed to remove package '{}': {}",
-            package_name, e
-        ));
+        reporter.report_error(format!("Failed to remove package '{package_name}': {e}"));
         return 1;
     }
 
@@ -145,14 +139,14 @@ mod tests {
         fs::create_dir_all(&package_dir).unwrap();
 
         // Create target package
-        let target_content = r#"
+        let target_content = r"
 name: target-package
 version: 1.0.0
 environments:
   test:
     install: echo 'install target'
     dependencies: []
-"#;
+";
         fs::write(
             package_dir.join("target-package.yml"),
             target_content.trim(),
@@ -160,7 +154,7 @@ environments:
         .unwrap();
 
         // Create dependent package
-        let dependent_content = r#"
+        let dependent_content = r"
 name: dependent-package
 version: 1.0.0
 environments:
@@ -168,7 +162,7 @@ environments:
     install: echo 'install dependent'
     dependencies:
       - target-package
-"#;
+";
         fs::write(
             package_dir.join("dependent-package.yml"),
             dependent_content.trim(),

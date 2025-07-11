@@ -30,39 +30,36 @@ pub(crate) async fn handle_edit(
         };
 
     // Try to get existing package, or create a new one
-    let package_blob = match existing_package {
-        Some(pkg) => {
-            reporter.report_info(format!(
-                "Opening existing package '{package_name}' for editing"
-            ));
-            pkg
-        }
-        None => {
-            reporter.report_info(format!("Package '{package_name}' does not exist."));
+    let package_blob = if let Some(pkg) = existing_package {
+        reporter.report_info(format!(
+            "Opening existing package '{package_name}' for editing"
+        ));
+        pkg
+    } else {
+        reporter.report_info(format!("Package '{package_name}' does not exist."));
 
-            // Prompt user for confirmation before creating
-            let confirm = Confirm::with_theme(&SimpleTheme)
-                .with_prompt(format!("Create new package '{package_name}'?"))
-                .default(false)
-                .interact();
+        // Prompt user for confirmation before creating
+        let confirm = Confirm::with_theme(&SimpleTheme)
+            .with_prompt(format!("Create new package '{package_name}'?"))
+            .default(false)
+            .interact();
 
-            match confirm {
-                Ok(true) => {
-                    // User confirmed, proceed with creation
-                }
-                Ok(false) => {
-                    reporter.report_info("Package creation cancelled.");
-                    return 0;
-                }
-                Err(_) => {
-                    reporter.report_error("Failed to read user input.");
-                    return 1;
-                }
+        match confirm {
+            Ok(true) => {
+                // User confirmed, proceed with creation
             }
-
-            reporter.report_info(format!("Creating new package '{package_name}'"));
-            common::create_new_package(package_name, config)
+            Ok(false) => {
+                reporter.report_info("Package creation cancelled.");
+                return 0;
+            }
+            Err(_) => {
+                reporter.report_error("Failed to read user input.");
+                return 1;
+            }
         }
+
+        reporter.report_info(format!("Creating new package '{package_name}'"));
+        common::create_new_package(package_name, config)
     };
 
     // Write the package to the file system first

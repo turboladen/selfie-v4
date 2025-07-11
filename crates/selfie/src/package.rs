@@ -37,8 +37,9 @@ impl GetPackage {
     ///
     /// * `name` - The package name
     /// * `packages_directory` - The directory where package files are stored
+    #[must_use]
     pub fn new(name: &str, packages_directory: &std::path::Path) -> Self {
-        let file_path = packages_directory.join(format!("{}.yml", name));
+        let file_path = packages_directory.join(format!("{name}.yml"));
         let package = Package::new_template(name);
 
         Self {
@@ -48,7 +49,7 @@ impl GetPackage {
         }
     }
 
-    /// Create a GetPackage from an existing package and file path
+    /// Create a `GetPackage` from an existing package and file path
     ///
     /// This is used when loading existing packages from the repository.
     ///
@@ -56,6 +57,7 @@ impl GetPackage {
     ///
     /// * `package` - The loaded package
     /// * `file_path` - The path where the package file is stored
+    #[must_use]
     pub fn from_existing(package: Package, file_path: PathBuf) -> Self {
         Self {
             package,
@@ -169,8 +171,8 @@ impl Package {
         environments.insert(
             "default".to_string(),
             EnvironmentConfig {
-                install: format!("# TODO: Add install command for {}", name),
-                check: Some(format!("# TODO: Add check command for {}", name)),
+                install: format!("# TODO: Add install command for {name}"),
+                check: Some(format!("# TODO: Add check command for {name}")),
                 dependencies: Vec::new(),
             },
         );

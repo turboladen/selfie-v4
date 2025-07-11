@@ -52,13 +52,12 @@ pub(super) fn open_editor(
     reporter: &TerminalProgressReporter,
     success_message: Option<String>,
 ) -> i32 {
-    let editor = match std::env::var("EDITOR") {
-        Ok(editor) => editor,
-        Err(_) => {
-            reporter.report_error("EDITOR environment variable is not set.");
-            reporter.report_info("Please set EDITOR and try again.");
-            return 1;
-        }
+    let editor = if let Ok(editor) = std::env::var("EDITOR") {
+        editor
+    } else {
+        reporter.report_error("EDITOR environment variable is not set.");
+        reporter.report_info("Please set EDITOR and try again.");
+        return 1;
     };
 
     let mut cmd = Command::new(&editor);
@@ -97,32 +96,29 @@ pub(super) fn check_editor_available(
     package_exists: bool,
     package_path: Option<&Path>,
 ) -> Option<String> {
-    match std::env::var("EDITOR") {
-        Ok(editor) => Some(editor),
-        Err(_) => {
-            reporter.report_error("EDITOR environment variable is not set.");
+    if let Ok(editor) = std::env::var("EDITOR") {
+        Some(editor)
+    } else {
+        reporter.report_error("EDITOR environment variable is not set.");
 
-            if package_exists {
-                if let Some(path) = package_path {
-                    reporter.report_info(format!(
-                        "Package '{}' exists at {}. Go ahead and open it in your editor of choice!",
-                        package_name,
-                        path.display()
-                    ));
-                } else {
-                    reporter.report_info(format!(
-                        "Package '{}' exists. Set EDITOR to edit it automatically.",
-                        package_name
-                    ));
-                }
+        if package_exists {
+            if let Some(path) = package_path {
+                reporter.report_info(format!(
+                    "Package '{}' exists at {}. Go ahead and open it in your editor of choice!",
+                    package_name,
+                    path.display()
+                ));
             } else {
                 reporter.report_info(format!(
-                    "Package '{}' doesn't exist yet. Set EDITOR and try again to create it.",
-                    package_name
+                    "Package '{package_name}' exists. Set EDITOR to edit it automatically."
                 ));
             }
-            None
+        } else {
+            reporter.report_info(format!(
+                "Package '{package_name}' doesn't exist yet. Set EDITOR and try again to create it."
+            ));
         }
+        None
     }
 }
 
@@ -269,7 +265,7 @@ mod tests {
     fn test_vs_code_wait_flag_logic() {
         // Test that VS Code gets the --wait flag
         let editor = "code";
-        let mut cmd = Command::new(&editor);
+        let mut cmd = Command::new(editor);
         cmd.arg("/tmp/test.yml");
 
         if editor == "code" {
@@ -321,7 +317,7 @@ mod tests {
 
     #[test]
     fn test_format_environment_names() {
-        let config = test_config_with_dir(&TempDir::new().unwrap().path());
+        let config = test_config_with_dir(TempDir::new().unwrap().path());
         let environments = vec!["test".to_string(), "production".to_string()];
 
         let result = format_environment_names(&environments, "test", &config);

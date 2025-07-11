@@ -43,7 +43,7 @@ pub struct ClapCli {
     /// Override the package directory from configuration file
     ///
     /// Specifies the directory where package definition files are located.
-    /// This overrides the package_directory setting in the config file.
+    /// This overrides the `package_directory` setting in the config file.
     ///
     /// Example: --package-directory=/path/to/packages
     #[clap(long, short = 'p', global = true)]

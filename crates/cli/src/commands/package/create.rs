@@ -112,7 +112,7 @@ fn get_valid_package_name(
     loop {
         // Check if package already exists
         if let Ok(existing_package) = repo.get_package(&current_name) {
-            reporter.report_info(format!("Package '{}' already exists.", current_name));
+            reporter.report_info(format!("Package '{current_name}' already exists."));
 
             let action = Select::with_theme(&SimpleTheme)
                 .with_prompt("What would you like to do?")
@@ -134,24 +134,21 @@ fn get_valid_package_name(
                     retry_count += 1;
                     if retry_count > MAX_NAME_RETRIES {
                         reporter.report_error(format!(
-                            "Too many retry attempts ({}). Please try again later.",
-                            MAX_NAME_RETRIES
+                            "Too many retry attempts ({MAX_NAME_RETRIES}). Please try again later."
                         ));
                         return Err(1);
                     }
 
-                    let new_name: String = match Input::with_theme(&SimpleTheme)
+                    let new_name: String = if let Ok(name) = Input::with_theme(&SimpleTheme)
                         .with_prompt(format!(
-                            "Enter a new package name (attempt {}/{})",
-                            retry_count, MAX_NAME_RETRIES
+                            "Enter a new package name (attempt {retry_count}/{MAX_NAME_RETRIES})"
                         ))
                         .interact()
                     {
-                        Ok(name) => name,
-                        Err(_) => {
-                            reporter.report_error("Failed to read package name.");
-                            return Err(1);
-                        }
+                        name
+                    } else {
+                        reporter.report_error("Failed to read package name.");
+                        return Err(1);
                     };
                     current_name = new_name;
                     continue; // Loop back to check the new name
@@ -161,10 +158,9 @@ fn get_valid_package_name(
                     return Ok(PackageNameResult::Cancelled);
                 }
             }
-        } else {
-            // Package doesn't exist, we can use this name
-            return Ok(PackageNameResult::CreateNew(current_name));
         }
+        // Package doesn't exist, we can use this name
+        return Ok(PackageNameResult::CreateNew(current_name));
     }
 }
 
@@ -174,8 +170,8 @@ fn create_basic_package(package_name: &str, config: &AppConfig) -> GetPackage {
     // Use the environment from config (which may be overridden by --environment)
     let env_name = config.environment();
     let env_config = EnvironmentConfig::new(
-        format!("# TODO: Add install command for {}", package_name),
-        Some(format!("# TODO: Add check command for {}", package_name)),
+        format!("# TODO: Add install command for {package_name}"),
+        Some(format!("# TODO: Add check command for {package_name}")),
         Vec::new(),
     );
 
@@ -189,12 +185,12 @@ fn create_basic_package(package_name: &str, config: &AppConfig) -> GetPackage {
         environments,
         config
             .package_directory()
-            .join(format!("{}.yml", package_name)),
+            .join(format!("{package_name}.yml")),
     );
 
     let file_path = config
         .package_directory()
-        .join(format!("{}.yml", package_name));
+        .join(format!("{package_name}.yml"));
 
     GetPackage {
         package,
@@ -302,7 +298,7 @@ fn create_package_interactive(
         };
 
         // Check command (optional, with default)
-        let default_check = format!("command -v {}", name);
+        let default_check = format!("command -v {name}");
         let check_cmd: String = Input::with_theme(&SimpleTheme)
             .with_prompt("Check command (optional)")
             .default(default_check)
@@ -320,10 +316,12 @@ fn create_package_interactive(
         };
 
         // Dependencies (get available packages)
-        let repo = common::create_package_repository(&config);
+        let repo = common::create_package_repository(config);
         let available_packages = repo.available_packages().unwrap_or_default();
 
-        let dependencies = if !available_packages.is_empty() {
+        let dependencies = if available_packages.is_empty() {
+            Vec::new()
+        } else {
             let selected = MultiSelect::with_theme(&SimpleTheme)
                 .with_prompt("Dependencies (select with space, confirm with enter)")
                 .items(&available_packages)
@@ -337,8 +335,6 @@ fn create_package_interactive(
                 .into_iter()
                 .map(|i| available_packages[i].clone())
                 .collect()
-        } else {
-            Vec::new()
         };
 
         let env_config = EnvironmentConfig::new(install_cmd, check_cmd, dependencies);
@@ -377,14 +373,10 @@ fn create_package_interactive(
         homepage,
         description,
         environments,
-        config
-            .package_directory()
-            .join(format!("{}.yml", file_name)),
+        config.package_directory().join(format!("{file_name}.yml")),
     );
 
-    let file_path = config
-        .package_directory()
-        .join(format!("{}.yml", file_name));
+    let file_path = config.package_directory().join(format!("{file_name}.yml"));
 
     Ok(GetPackage {
         package,
