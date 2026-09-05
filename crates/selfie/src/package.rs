@@ -1150,9 +1150,10 @@ impl Package {
     /// A non-empty [`Checked`](TopLevelKeys::Checked) means `selfie apply`
     /// refuses the whole package: the keys it does carry may not be the ones its
     /// author meant, and the unrecognized ones are dropped rather than applied.
-    /// [`Unchecked`](TopLevelKeys::Unchecked) means nothing is known either way;
-    /// apply reports it, and refuses the package when it has nothing left to
-    /// deploy.
+    /// [`Unchecked`](TopLevelKeys::Unchecked) means nothing is known either
+    /// way, and `selfie apply` refuses the package for that alone. A key that
+    /// could not be ruled out is what decides whether the entries it did read
+    /// are the ones to deploy, so having entries is not a reason to proceed.
     #[must_use]
     pub(crate) fn top_level_keys(&self) -> &TopLevelKeys {
         &self.top_level_keys
