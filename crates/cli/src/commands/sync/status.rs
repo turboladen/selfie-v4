@@ -104,11 +104,26 @@ fn handle_status_event(event: &PackageEvent, display: &DisplayManager, use_color
         PackageEvent::SyncDriftSummary {
             drifted_targets,
             total_deployed,
+            refused_count,
             ..
         } => {
             display.println("");
+            // A package drift could not check is neither drifted nor clean, and
+            // saying "no drift" for one answers a question nobody asked. The
+            // count is reported first because it bounds what the rest of the
+            // line is worth: the deployed total covers only what was examined.
+            if *refused_count > 0 {
+                display.print_warning(format!(
+                    "{refused_count} package(s) could not be checked -- run 'selfie dotfiles drift' for the reason"
+                ));
+            }
             if drifted_targets.is_empty() {
-                display.print_success(format!("No dotfile drift ({total_deployed} deployed)"));
+                let (line, clean) = no_drift_line(*total_deployed, *refused_count);
+                if clean {
+                    display.print_success(line);
+                } else {
+                    display.print_warning(line);
+                }
             } else {
                 let count = drifted_targets.len();
                 display.print_warning(format!(
@@ -141,6 +156,32 @@ fn handle_status_event(event: &PackageEvent, display: &DisplayManager, use_color
         PackageEvent::Started { .. } | PackageEvent::Progress { .. } => true,
 
         _ => false,
+    }
+}
+
+// The wording and the level for a run that found no drift.
+//
+// The check mark is what a reader scans for, so it may not appear over a run
+// that skipped something: "No dotfile drift" is true of the packages that were
+// examined and reads as a clean bill of health for the repository. With a
+// refusal present the line stays a warning and names what it covers.
+//
+// Split out because it is the only part of this renderer a test can see --
+// `DisplayManager` writes through a `MultiProgress`, so what reaches the
+// terminal cannot be captured.
+fn no_drift_line(total_deployed: usize, refused_count: usize) -> (String, bool) {
+    if refused_count > 0 {
+        (
+            format!(
+                "No drift among the packages that could be checked ({total_deployed} deployed)"
+            ),
+            false,
+        )
+    } else {
+        (
+            format!("No dotfile drift ({total_deployed} deployed)"),
+            true,
+        )
     }
 }
 
@@ -197,6 +238,26 @@ mod tests {
         assert!(handle_status_event(&event, &display, false));
     }
 
+    // Copilot flagged the shipped version of this: a green check beside a
+    // warning saying packages were skipped is the contradiction this branch
+    // removes from `dotfiles drift`, reproduced one command over.
+    #[test]
+    fn a_run_that_skipped_nothing_may_report_success() {
+        let (line, clean) = super::no_drift_line(5, 0);
+        assert!(clean, "nothing was skipped, so the check mark is earned");
+        assert!(line.contains("No dotfile drift"), "got: {line}");
+    }
+
+    #[test]
+    fn a_run_that_skipped_a_package_may_not_report_success() {
+        let (line, clean) = super::no_drift_line(5, 2);
+        assert!(!clean, "a skipped package must not be reported as clean");
+        assert!(
+            line.contains("could be checked"),
+            "the line must name what it covers: {line}"
+        );
+    }
+
     #[test]
     fn handles_drift_summary_no_drift() {
         let display = DisplayManager::new(false);
@@ -204,6 +265,7 @@ mod tests {
             operation_info: make_operation_info(),
             drifted_targets: vec![],
             total_deployed: 5,
+            refused_count: 0,
         };
 
         assert!(handle_status_event(&event, &display, false));
@@ -216,6 +278,7 @@ mod tests {
             operation_info: make_operation_info(),
             drifted_targets: vec!["~/.config/starship.toml".to_string()],
             total_deployed: 5,
+            refused_count: 0,
         };
 
         assert!(handle_status_event(&event, &display, false));
