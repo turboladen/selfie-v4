@@ -1,6 +1,7 @@
 mod builder;
 pub mod event;
 pub mod port;
+mod refusal;
 pub mod repository;
 pub mod service;
 pub mod validate;
@@ -19,6 +20,7 @@ pub mod git_adapter {
 }
 
 pub use self::builder::{EnvironmentConfigBuilder, PackageBuilder};
+pub(crate) use self::refusal::SpecRefusal;
 pub use self::service::{InstallOptions, PackageService, SpecService};
 
 // Core package entity and related types
@@ -857,6 +859,34 @@ pub struct Package {
     /// package. Same limit `validate_unknown_fields` already has.
     #[serde(skip)]
     top_level_keys: TopLevelKeys,
+
+    /// Which directory this spec was loaded from.
+    ///
+    /// Set by [`set_source`](Self::set_source) alongside the path, so a loader
+    /// cannot record where a file came from without saying which kind of spec it
+    /// is. Deserialization skips it, leaving
+    /// [`Memory`](SpecOrigin::Memory) — the variant no rule keyed on origin
+    /// applies to, so a package built through the builder is never refused for
+    /// where it did not come from.
+    #[serde(skip)]
+    origin: SpecOrigin,
+}
+
+/// Which directory a spec was loaded from.
+///
+/// Package specs and standalone dotfile specs are both [`Package`]s and are
+/// deployed alike, but they are not required to be alike: a standalone dotfile
+/// spec declares no environments, because it is deployed on every machine
+/// whatever the environment.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SpecOrigin {
+    /// Built in memory, with no file behind it.
+    #[default]
+    Memory,
+    /// A package spec, from the configured package directory.
+    PackageDirectory,
+    /// A standalone dotfile spec, from the configured dotfiles directory.
+    DotfilesDirectory,
 }
 
 /// Compare only values, ignoring YAML source locations.
@@ -1081,6 +1111,7 @@ impl Package {
             path,
             raw_yaml: None,
             top_level_keys: TopLevelKeys::NoSource,
+            origin: SpecOrigin::Memory,
         }
     }
 
@@ -1112,6 +1143,7 @@ impl Package {
             path: PathBuf::new(), // Will be set by GetPackage::new
             raw_yaml: None,
             top_level_keys: TopLevelKeys::NoSource,
+            origin: SpecOrigin::Memory,
         }
     }
 
@@ -1124,10 +1156,17 @@ impl Package {
     /// Deriving the keys here rather than on demand keeps the YAML parse at load
     /// time: `handle_apply` consults them once per package inside its loop, and
     /// re-parsing the file there would repeat work the loader already did.
-    pub(crate) fn set_source(&mut self, path: PathBuf, raw_yaml: String) {
+    pub(crate) fn set_source(&mut self, path: PathBuf, raw_yaml: String, origin: SpecOrigin) {
         self.top_level_keys = top_level_keys(&raw_yaml);
         self.path = path;
         self.raw_yaml = Some(raw_yaml);
+        self.origin = origin;
+    }
+
+    /// Which directory this spec was loaded from.
+    #[must_use]
+    pub fn origin(&self) -> SpecOrigin {
+        self.origin
     }
 
     /// The YAML this package was parsed from, or `None` when it was built
@@ -1149,9 +1188,10 @@ impl Package {
     /// A non-empty [`Checked`](TopLevelKeys::Checked) means `selfie apply`
     /// refuses the whole package: the keys it does carry may not be the ones its
     /// author meant, and the unrecognized ones are dropped rather than applied.
-    /// [`Unchecked`](TopLevelKeys::Unchecked) means nothing is known either way;
-    /// apply reports it, and refuses the package when it has nothing left to
-    /// deploy.
+    /// [`Unchecked`](TopLevelKeys::Unchecked) means nothing is known either
+    /// way, and `selfie apply` refuses the package for that alone. A key that
+    /// could not be ruled out is what decides whether the entries it did read
+    /// are the ones to deploy, so having entries is not a reason to proceed.
     #[must_use]
     pub(crate) fn top_level_keys(&self) -> &TopLevelKeys {
         &self.top_level_keys
@@ -1930,6 +1970,7 @@ environments:
         package.set_source(
             PathBuf::from("/packages/myapp.yml"),
             "name: myapp\n_dotfiles: []\n".to_string(),
+            SpecOrigin::PackageDirectory,
         );
 
         let keys = match package.top_level_keys() {
@@ -1953,6 +1994,7 @@ environments:
         package.set_source(
             PathBuf::from("/packages/myapp.yml"),
             YAML_THAT_CANNOT_BE_RE_READ.to_string(),
+            SpecOrigin::PackageDirectory,
         );
 
         assert!(matches!(
