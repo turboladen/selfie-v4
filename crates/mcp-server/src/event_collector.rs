@@ -300,11 +300,13 @@ fn event_to_json(event: &PackageEvent) -> Option<Value> {
         PackageEvent::SyncDriftSummary {
             drifted_targets,
             total_deployed,
+            refused_count,
             ..
         } => Some(serde_json::json!({
             "type": "sync_drift_summary",
             "drifted_targets": drifted_targets,
             "total_deployed": total_deployed,
+            "refused_count": refused_count,
         })),
         PackageEvent::SyncCommitCreated {
             package_name,
