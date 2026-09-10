@@ -69,8 +69,9 @@ That makes the capitalization half a portability requirement rather than a style
 ### `environments`
 
 A map of environment names to their installation configurations. At least one environment must be
-defined, and both `spec validate` and `apply` refuse a package-directory spec that declares none. A
-standalone dotfile spec in the dotfiles directory declares none by design — see
+defined, and `spec validate`, `apply`, `package install`, `package check` and `package audit` all
+refuse a package-directory spec that declares none. A standalone dotfile spec in the dotfiles
+directory declares none by design — see
 [And a package spec has to declare an environment at all](#and-a-package-spec-has-to-declare-an-environment-at-all).
 
 ```yaml
@@ -1254,6 +1255,18 @@ level: there is no entry to attach it to, and the entries the file does have may
 wrote. It counts as a refusal, so [the run exits non-zero](../README.md#a-refusal-is-not-a-success).
 `selfie spec validate` reports the same keys in the same words, and the commands that rewrite a
 package file refuse them too — all three agree on the set.
+
+`selfie package install`, `check` and `audit` refuse the same file rather than skipping it, because
+each was given one package name and has nothing else to do:
+
+```
+Cannot use package `myapp`: unknown field 'configs'; expected one of: name, homepage, description, dotfiles, post_install_note, environments
+```
+
+They ask before looking up the command they are about to run, since that lookup is where the harm
+is: an `_environments:` anchor costs them the mapping the command comes from, so what runs is not
+what you wrote. `install` asks it of every package in the dependency graph, because a hidden
+`environments:` is also a hidden `dependencies:` list.
 
 Checking those keys means reading the file a second time, and a file selfie can load as a package
 can still fail that second read — a mapping used as a key is one way. The package is then

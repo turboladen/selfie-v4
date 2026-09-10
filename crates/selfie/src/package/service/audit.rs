@@ -32,6 +32,12 @@ where
         Err(err) => return OperationResult::Failure(err.into()),
     };
 
+    if let Some(refusal) =
+        steps::refuse_unreadable_spec(package_name, &package_blob, config.environment())
+    {
+        return refusal;
+    }
+
     // Step 2: Get environment-specific audit command
     let (audit_command, dependencies) = match get_audit_command(
         package_name,
@@ -102,11 +108,28 @@ where
         sender.send_spec_skipped(invalid.clone()).await;
     }
 
-    let package_names: Vec<String> = packages
-        .valid_packages()
-        .filter(|p| p.environments().contains_key(config.environment()))
-        .map(|p| p.name().to_string())
-        .collect();
+    // A spec whose `environments:` a shadowing key hides parses, so it reaches
+    // `valid_packages` and the filter below drops it for declaring nothing about
+    // this machine -- indistinguishable from a package that genuinely declares no
+    // environment here, and absent from the run with no diagnostic. `audit <name>`
+    // refuses the same file, so this run has to say it left it out.
+    //
+    // A warning rather than an error, as for an unparsable file above: whether
+    // `audit --all` exits non-zero over one file is user-visible behavior and
+    // belongs to its own change.
+    let mut package_names: Vec<String> = Vec::new();
+    for package in packages.valid_packages() {
+        if let Some(refusal) = package.spec_refusal(config.environment()) {
+            sender
+                .send_warning(format!("Skipping package '{}': {refusal}", package.name()))
+                .await;
+            continue;
+        }
+
+        if package.environments().contains_key(config.environment()) {
+            package_names.push(package.name().to_string());
+        }
+    }
 
     let total_packages = package_names.len();
     let max_concurrent = config.max_concurrency().get();
@@ -1014,6 +1037,102 @@ mod tests {
             .find(|w| w.contains("ghost.yml"))
             .unwrap_or_else(|| panic!("no warning named the invalid file; got: {warnings:?}"));
         assert!(named.contains("named pipe (fifo)"), "got: {named}");
+    }
+
+    // The guard above this one is only worth its lines if a run can be watched
+    // skipping a file. Without this the guard could be deleted and every bulk
+    // audit test would stay green while the command audited a spec selfie had
+    // already decided it would not read.
+    #[tokio::test]
+    async fn test_handle_audit_all_skips_a_spec_it_will_not_read() {
+        use crate::package::port::ListPackagesOutput;
+
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let config = test_config(temp_dir.path());
+
+        let good = PackageBuilder::default()
+            .name("good-pkg")
+            .environment("test", |b| b.install("echo install").audit_some("echo bun"))
+            .path(temp_dir.path().join("good-pkg.yml"))
+            .build();
+
+        // Parsed from text rather than built, because the rule reads the file's
+        // own top level and a package assembled in memory has none.
+        let shadowed_yaml = "name: shadowed-pkg\n_environments:\n  test:\n    install: \"echo decoy\"\nenvironments:\n  test:\n    install: \"echo install\"\n    audit: \"echo bun\"\n".to_string();
+        let mut shadowed: crate::package::Package =
+            crate::yaml::parse(&shadowed_yaml).expect("fixture must parse");
+        shadowed.set_source(
+            temp_dir.path().join("shadowed-pkg.yml"),
+            shadowed_yaml,
+            crate::package::SpecOrigin::PackageDirectory,
+        );
+
+        let good_for_get = good.clone();
+        let good_path = temp_dir.path().join("good-pkg.yml");
+        let mut mock_repo = MockPackageRepository::new();
+        mock_repo.expect_list_packages().returning(move || {
+            Ok(ListPackagesOutput(vec![
+                Ok(good.clone()),
+                Ok(shadowed.clone()),
+            ]))
+        });
+        mock_repo.expect_get_package().returning(move |_| {
+            Ok(GetPackage::from_existing(
+                good_for_get.clone(),
+                good_path.clone(),
+            ))
+        });
+
+        let mut mock_runner = MockCommandRunner::new();
+        mock_runner
+            .expect_execute()
+            .returning(|_, _| Box::pin(async { Ok(mock_command_output("bun\n", true)) }));
+
+        let (sender, mut rx) = test_sender();
+        let mut progress = ProgressTracker::new(1);
+        let token = CancellationToken::new();
+
+        let result = handle_audit_all(
+            &mock_repo,
+            &config,
+            &mock_runner,
+            &sender,
+            &mut progress,
+            &token,
+        )
+        .await;
+
+        assert!(
+            matches!(result, OperationResult::Success(_)),
+            "one unreadable file must not abandon the rest of the run, got: {result:?}"
+        );
+
+        let mut warnings = Vec::new();
+        let mut audit_results = 0;
+        while let Ok(event) = rx.try_recv() {
+            match event {
+                crate::package::event::PackageEvent::Warning { message, .. } => {
+                    warnings.push(message);
+                }
+                crate::package::event::PackageEvent::AuditResultCompleted { .. } => {
+                    audit_results += 1;
+                }
+                _ => {}
+            }
+        }
+
+        assert_eq!(
+            audit_results, 1,
+            "only the readable package may produce an audit result"
+        );
+        let named = warnings
+            .iter()
+            .find(|w| w.contains("shadowed-pkg"))
+            .unwrap_or_else(|| panic!("no warning named the skipped package; got: {warnings:?}"));
+        assert!(
+            named.contains("_environments"),
+            "the warning must name the key it refused over, got: {named}"
+        );
     }
 
     #[tokio::test]

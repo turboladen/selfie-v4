@@ -23,7 +23,7 @@ use test_common::{
 };
 
 use selfie::package::{
-    event::{OperationResult, PackageEvent},
+    event::{DependencyFailure, OperationFailure, OperationResult, PackageEvent},
     service::{InstallOptions, PackageService, SpecService},
 };
 
@@ -588,4 +588,161 @@ async fn test_service_install_no_post_install_note_when_already_installed() {
         note_count, 0,
         "Second install should NOT emit PostInstallNote since package is already installed"
     );
+}
+
+// `install`, `check` and `audit` load a spec and then look up the environment's
+// command in it. A key shadowing `environments:` makes that lookup miss, so the
+// command they run is not the one the file's author wrote -- the install-side
+// version of the harm apply was taught to refuse.
+//
+// The fixture carries a real `environments:` as well as the shadowing key, so
+// these tests exercise the unknown-key rule alone. A file with only
+// `_environments:` would also be refused, for declaring no environment at all,
+// and would pass these tests with the unknown-key rule deleted.
+mod a_spec_selfie_cannot_read {
+    use super::*;
+
+    // The shadowing key appended to what `create_service_test_package_file`
+    // writes for a working package, so the fixture differs from one every command
+    // below accepts in exactly that key, however that helper changes. Differing
+    // in one way is the whole point: a fixture that also lacks a check command is
+    // refused for lacking one, and reports nothing about the rule under test.
+    fn write_shadowed(dir: &TempDir, name: &str) {
+        let file_path = create_test_package_file(dir, name, true);
+        let mut content = std::fs::read_to_string(&file_path).unwrap();
+        content.push_str("\n_environments:\n  test:\n    install: \"echo decoy\"\n");
+        std::fs::write(&file_path, content).unwrap();
+    }
+
+    // The refusal names the key it refused over, which is what tells a reader
+    // which of the file's rules they broke. Asserting on it is what separates
+    // these tests from ones that pass on any failure at all -- a package that
+    // fails to load, or an environment the config does not name, would satisfy a
+    // bare "did it fail".
+    // Matches the variant, not the sentence. A fixture that is refused for some
+    // other reason -- a missing check command, a parse error -- renders a message
+    // of its own, and a test satisfied by any failure mentioning the key would
+    // accept it. The reason string is still checked, because which key selfie
+    // objected to is data rather than wording.
+    fn assert_refused_over_the_shadowing_key(events: &[PackageEvent]) {
+        let reason = match get_operation_result(events).expect("the operation must complete") {
+            OperationResult::Failure(OperationFailure::UnreadableSpec { reason, .. })
+            | OperationResult::Failure(OperationFailure::DependencyError(
+                DependencyFailure::UnreadableSpec { reason, .. },
+            )) => reason.clone(),
+            other => panic!("the spec must be refused as unreadable, got: {other:?}"),
+        };
+        assert!(
+            reason.contains("_environments"),
+            "the refusal must name the key it refused over, got: {reason}"
+        );
+    }
+
+    // The failure names the package that pulled the unreadable one in, so a user
+    // who asked for one package is not handed the name of another with no way to
+    // tell why selfie looked at it.
+    fn assert_required_by(events: &[PackageEvent], expected: &str) {
+        match get_operation_result(events).expect("the operation must complete") {
+            OperationResult::Failure(OperationFailure::DependencyError(
+                DependencyFailure::UnreadableSpec { required_by, .. },
+            )) => assert_eq!(
+                required_by.as_deref(),
+                Some(expected),
+                "the failure must name the package that required it"
+            ),
+            other => panic!("expected a dependency refusal, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn install_refuses_it() {
+        let temp_dir = TempDir::new().unwrap();
+        write_shadowed(&temp_dir, "shadowed");
+        let service = create_service_test_service(&temp_dir);
+
+        let events =
+            collect_events(service.install("shadowed", InstallOptions::default()).await).await;
+
+        assert_failed_operation(&events);
+        assert_refused_over_the_shadowing_key(&events);
+    }
+
+    // A dependency's spec is read for its own `environments:` mapping, and a
+    // shadowed one leaves the graph short rather than empty -- the root installs,
+    // and what it needs does not. The root here is clean, so only the dependency
+    // can be what stops the run.
+    #[tokio::test]
+    async fn install_refuses_a_dependency_carrying_it() {
+        let temp_dir = TempDir::new().unwrap();
+        let _ = create_service_test_package_file_with_deps(&temp_dir, "root", &["shadowed"]);
+        write_shadowed(&temp_dir, "shadowed");
+        let service = create_service_test_service(&temp_dir);
+
+        let events = collect_events(service.install("root", InstallOptions::default()).await).await;
+
+        assert_failed_operation(&events);
+        assert_refused_over_the_shadowing_key(&events);
+        assert_required_by(&events, "root");
+    }
+
+    #[tokio::test]
+    async fn check_refuses_it() {
+        let temp_dir = TempDir::new().unwrap();
+        write_shadowed(&temp_dir, "shadowed");
+        let service = create_service_test_service(&temp_dir);
+
+        let events = collect_events(service.check("shadowed").await).await;
+
+        assert_failed_operation(&events);
+        assert_refused_over_the_shadowing_key(&events);
+    }
+
+    #[tokio::test]
+    async fn audit_refuses_it() {
+        let temp_dir = TempDir::new().unwrap();
+        write_shadowed(&temp_dir, "shadowed");
+        let service = create_service_test_service(&temp_dir);
+
+        let events = collect_events(service.audit("shadowed").await).await;
+
+        assert_failed_operation(&events);
+        assert_refused_over_the_shadowing_key(&events);
+    }
+
+    // The controls. A guard that refuses everything passes every test above and
+    // is worse than no guard at all, so the same spec without the key has to
+    // reach each of the three commands.
+    #[tokio::test]
+    async fn the_same_spec_without_the_key_still_installs() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_package_file(&temp_dir, "clean", true);
+        let service = create_service_test_service(&temp_dir);
+
+        let events =
+            collect_events(service.install("clean", InstallOptions::default()).await).await;
+
+        assert_successful_operation(&events);
+    }
+
+    #[tokio::test]
+    async fn the_same_spec_without_the_key_still_checks() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_package_file(&temp_dir, "clean", true);
+        let service = create_service_test_service(&temp_dir);
+
+        let events = collect_events(service.check("clean").await).await;
+
+        assert_successful_operation(&events);
+    }
+
+    #[tokio::test]
+    async fn the_same_spec_without_the_key_still_audits() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_package_file(&temp_dir, "clean", true);
+        let service = create_service_test_service(&temp_dir);
+
+        let events = collect_events(service.audit("clean").await).await;
+
+        assert_successful_operation(&events);
+    }
 }
