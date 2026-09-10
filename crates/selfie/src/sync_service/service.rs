@@ -890,7 +890,7 @@ fn validate_changed_packages(
         // once in the validator's words and once in apply's -- and a reader
         // cannot tell that both name one problem.
         let mut issues = issues;
-        if let Some(refusal) = package.apply_refusal(environment) {
+        if let Some(refusal) = package.spec_refusal(environment) {
             let category = "ApplyRefusal".to_string();
             let already = issues
                 .iter()

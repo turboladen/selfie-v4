@@ -1295,7 +1295,7 @@ where
         //
         // The reason arrives already worded for the level it came from, so this
         // adds only the package it belongs to.
-        if let Some(reason) = package.apply_refusal(config.environment()) {
+        if let Some(reason) = package.spec_refusal(config.environment()) {
             sender
                 .send_warning(format!("Skipping package '{}': {reason}", package.name()))
                 .await;
@@ -1725,7 +1725,7 @@ where
         // The entries are not examined at all. A package refused whole is
         // refused before there is an entry to attach a reason to, which is the
         // same reason apply asks here rather than per entry.
-        if let Some(refusal) = package.apply_refusal(config.environment()) {
+        if let Some(refusal) = package.spec_refusal(config.environment()) {
             sender
                 .send_warning(format!("Skipping package '{}': {refusal}", package.name()))
                 .await;
