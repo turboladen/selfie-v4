@@ -7,7 +7,7 @@ use crate::{
     config::SelfieConfig,
     package::{
         EnvironmentConfig, GetPackage,
-        event::{ConsoleOutput, EventSender, OperationResult},
+        event::{ConsoleOutput, EventSender, OperationFailure, OperationResult},
         port::{PackageError, PackageRepoError, PackageRepository},
         service::ProgressTracker,
     },
@@ -34,6 +34,32 @@ where
         }
         Err(e) => Err(e),
     }
+}
+
+/// The failure a single-package command reports for a spec selfie will not
+/// read, or `None` when the spec is usable in `environment`.
+///
+/// Ask this after loading the package and before looking up any command in it.
+pub(super) fn refuse_unreadable_spec(
+    package_name: &str,
+    package_blob: &GetPackage,
+    environment: &str,
+) -> Option<OperationResult> {
+    // Asked before the environment's command is looked up, because that lookup is
+    // the harm: a key shadowing `environments:` makes it miss or find a decoy, and
+    // what runs is not what the file's author wrote.
+    //
+    // A failure rather than a skip. Apply works through every package and carries
+    // on past one it will not touch; the commands asking here were given a single
+    // package name, so there is nothing else to do that would make exiting 0 true.
+    //
+    // Shared, so a fourth command cannot answer differently about the same file.
+    let refusal = package_blob.package.spec_refusal(environment)?;
+
+    Some(OperationResult::Failure(OperationFailure::UnreadableSpec {
+        package_name: package_name.to_string(),
+        reason: refusal.to_string(),
+    }))
 }
 
 /// Shared step: build an `EnvironmentNotFound` error when the current

@@ -824,6 +824,16 @@ pub enum OperationFailure {
     /// adapter can render the two halves of
     /// [`SudoRefusal`](crate::privilege::SudoRefusal) in its own channels.
     Privilege(crate::privilege::SudoRefusal),
+    /// A command was given a spec selfie will not read.
+    ///
+    /// Typed rather than folded into [`Generic`](Self::Generic) for the reason
+    /// [`Privilege`](Self::Privilege) is: a test can assert the refusal happened
+    /// without matching on its wording, and an adapter reporting structure
+    /// rather than prose has the package and the reason as separate fields.
+    UnreadableSpec {
+        package_name: String,
+        reason: String,
+    },
     /// Generic failure with a freeform message
     Generic(String),
 }
@@ -870,6 +880,21 @@ pub enum DependencyFailure {
         package_name: String,
         dependency_name: String,
     },
+    /// A package in the graph carries a spec selfie refuses to read
+    ///
+    /// Resolution stops rather than skipping the package, so nothing installs
+    /// from a graph selfie knows to be incomplete.
+    // `environments:` is the mapping a shadowing key hides, and that mapping is
+    // where dependencies are declared -- so continuing would build a graph short
+    // by an unknown number of edges and say nothing about it.
+    UnreadableSpec {
+        package_name: String,
+        /// The package that pulled this one into the graph, when one did.
+        ///
+        /// `None` when the user named this package themselves.
+        required_by: Option<String>,
+        reason: String,
+    },
 }
 
 impl std::fmt::Display for OperationFailure {
@@ -886,6 +911,10 @@ impl std::fmt::Display for OperationFailure {
             OperationFailure::Privilege(refusal) => {
                 write!(f, "{}. {}", refusal.message(), refusal.suggestion())
             }
+            OperationFailure::UnreadableSpec {
+                package_name,
+                reason,
+            } => write!(f, "Cannot use package `{package_name}`: {reason}"),
             OperationFailure::Generic(msg) => write!(f, "{msg}"),
         }
     }
@@ -930,6 +959,24 @@ impl std::fmt::Display for DependencyFailure {
             } => write!(
                 f,
                 "Package `{package_name}` depends on `{dependency_name}`, which was not found"
+            ),
+            DependencyFailure::UnreadableSpec {
+                package_name,
+                required_by: Some(parent),
+                reason,
+            } => write!(
+                f,
+                "Package `{parent}` depends on `{package_name}`, which carries a spec selfie will \
+                 not read, so its dependencies are unknown: {reason}"
+            ),
+            DependencyFailure::UnreadableSpec {
+                package_name,
+                required_by: None,
+                reason,
+            } => write!(
+                f,
+                "Package `{package_name}` carries a spec selfie will not read, so its dependencies \
+                 are unknown: {reason}"
             ),
         }
     }
@@ -1802,6 +1849,20 @@ impl OperationFailure {
         OperationFailure::DependencyError(DependencyFailure::MissingDependency {
             package_name,
             dependency_name,
+        })
+    }
+
+    /// Creates a failure for a package whose spec selfie refuses to read
+    #[must_use]
+    pub fn unreadable_spec(
+        package_name: String,
+        required_by: Option<String>,
+        reason: String,
+    ) -> Self {
+        OperationFailure::DependencyError(DependencyFailure::UnreadableSpec {
+            package_name,
+            required_by,
+            reason,
         })
     }
 }

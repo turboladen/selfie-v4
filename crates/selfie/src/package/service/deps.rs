@@ -125,6 +125,24 @@ where
             }
         })?;
 
+        // Asked before the environment is read, because reading it is the harm.
+        // A key shadowing `environments:` makes this lookup miss, and a miss
+        // here is indistinguishable from a package that genuinely declares no
+        // dependencies: `deps` and `recommends` come back empty, the graph is
+        // built short, and install runs to completion without the packages this
+        // one needs.
+        if let Some(refusal) = package_blob.package.spec_refusal(config_environment) {
+            // Named the same way a missing dependency is: a user who asked to
+            // install one package and is handed the name of another has no way
+            // to tell why selfie looked at it.
+            let required_by = (path.len() >= 2).then(|| path[path.len() - 2].clone());
+            return Err(Box::new(OperationFailure::unreadable_spec(
+                package_name.to_string(),
+                required_by,
+                refusal.to_string(),
+            )));
+        }
+
         // Get deps and recommends for the current environment
         let env_config = package_blob.package.environments().get(config_environment);
 
@@ -243,6 +261,21 @@ where
             visit_state.remove(package_name);
             return Ok(());
         };
+
+        // The same question `dfs` asks, and the same reason: a key shadowing
+        // `environments:` empties the two lists below, so the edges this walk is
+        // here to find are never read. Skipped the way a package that does not
+        // load is skipped just above, because a recommend is soft and refusing one
+        // must not fail the install its parent asked for. Clearing the entry keeps
+        // a `Visited` mark off a package whose edges nothing looked at.
+        if package_blob
+            .package
+            .spec_refusal(config_environment)
+            .is_some()
+        {
+            visit_state.remove(package_name);
+            return Ok(());
+        }
 
         // Extract both deps and recommends from the environment config
         let (deps, recs) = package_blob
@@ -681,5 +714,68 @@ mod tests {
             .unwrap();
 
         assert_eq!(graph.install_order, vec!["pkg-a"]);
+    }
+
+    // A package the recommend walk refused must still be refused when something
+    // depends on it hard.
+    //
+    // This is what the `visit_state.remove` in the recommend walk protects.
+    // Leaving the entry behind marks a package on the strength of edges nothing
+    // read: the walk returns early without recording it, and the later hard
+    // visit either reports a cycle that does not exist or skips a package the
+    // install needs. The second is the shape of a bug already open against this
+    // function, so the cleanup is not a tidy-up.
+    #[tokio::test]
+    async fn a_refused_recommend_is_still_refused_as_a_hard_dependency() {
+        // Parsed from text, not built: the rule reads the file's own top level,
+        // and a package assembled in memory has none to read.
+        fn refused(name: &str) -> GetPackage {
+            let yaml = format!(
+                "name: {name}\n_environments:\n  test:\n    install: \"echo decoy\"\nenvironments:\n  test:\n    install: \"echo real\"\n"
+            );
+            let mut pkg: crate::package::Package =
+                crate::yaml::parse(&yaml).expect("fixture must parse");
+            pkg.set_source(
+                std::path::PathBuf::from(format!("/tmp/{name}.yml")),
+                yaml,
+                crate::package::SpecOrigin::PackageDirectory,
+            );
+            GetPackage {
+                package: pkg,
+                file_path: std::path::PathBuf::from(format!("/tmp/{name}.yml")),
+                is_new: false,
+            }
+        }
+
+        // root -> [pkg-a, pkg-b]; pkg-a recommends pkg-r; pkg-b depends on pkg-r.
+        // The recommend walk reaches pkg-r first and declines to judge it.
+        let mut repo = MockPackageRepository::new();
+        repo.expect_get_package()
+            .withf(|name| name == "root")
+            .returning(|_| Ok(mock_package("root", &["pkg-a", "pkg-b"])));
+        repo.expect_get_package()
+            .withf(|name| name == "pkg-a")
+            .returning(|_| Ok(mock_package_with_recommends("pkg-a", &[], &["pkg-r"])));
+        repo.expect_get_package()
+            .withf(|name| name == "pkg-b")
+            .returning(|_| Ok(mock_package("pkg-b", &["pkg-r"])));
+        repo.expect_get_package()
+            .withf(|name| name == "pkg-r")
+            .returning(|_| Ok(refused("pkg-r")));
+
+        let sender = make_sender();
+        let error = resolve_dependencies("root", &repo, "test", &sender)
+            .await
+            .expect_err("a hard dependency selfie will not read must fail the resolution");
+
+        let rendered = format!("{error:?}");
+        assert!(
+            rendered.contains("UnreadableSpec"),
+            "the failure must name the spec it would not read, not a cycle: {rendered}"
+        );
+        assert!(
+            rendered.contains("pkg-r"),
+            "the failure must name the package: {rendered}"
+        );
     }
 }

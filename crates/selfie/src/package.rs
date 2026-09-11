@@ -853,7 +853,7 @@ pub struct Package {
     /// Derived from `raw_yaml` at load time rather than during deserialization,
     /// which would mean hand-writing `Deserialize` for this whole struct — its
     /// `Spanned` fields and custom environment deserializer included — for
-    /// something only the apply path reads.
+    /// something only the refusal rules read.
     ///
     /// [`NoSource`](TopLevelKeys::NoSource) for a programmatically built
     /// package. Same limit `validate_unknown_fields` already has.
@@ -1185,11 +1185,11 @@ impl Package {
 
     /// What this file's top level holds that a package does not accept.
     ///
-    /// A non-empty [`Checked`](TopLevelKeys::Checked) means `selfie apply`
-    /// refuses the whole package: the keys it does carry may not be the ones its
-    /// author meant, and the unrecognized ones are dropped rather than applied.
+    /// A non-empty [`Checked`](TopLevelKeys::Checked) means selfie refuses the
+    /// whole package: the keys it does carry may not be the ones its author
+    /// meant, and the unrecognized ones are dropped rather than applied.
     /// [`Unchecked`](TopLevelKeys::Unchecked) means nothing is known either
-    /// way, and `selfie apply` refuses the package for that alone. A key that
+    /// way, and selfie refuses the package for that alone. A key that
     /// could not be ruled out is what decides whether the entries it did read
     /// are the ones to deploy, so having entries is not a reason to proceed.
     #[must_use]

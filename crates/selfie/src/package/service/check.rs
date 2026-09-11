@@ -35,6 +35,12 @@ where
         Err(result) => return *result,
     };
 
+    if let Some(refusal) =
+        steps::refuse_unreadable_spec(package_name, &package_blob, config.environment())
+    {
+        return refusal;
+    }
+
     // Step 2: Get environment-specific check command
     let check_command = match get_check_command(
         package_name,

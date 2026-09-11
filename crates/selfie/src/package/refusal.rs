@@ -1,5 +1,4 @@
-//! Whether `selfie apply` refuses a package before it reaches any of its
-//! entries.
+//! Whether selfie refuses a whole package before it acts on any part of it.
 
 use std::fmt;
 
@@ -82,23 +81,24 @@ impl Package {
             .or_else(|| self.unchecked_top_level())
     }
 
-    /// Why `selfie apply` refuses this whole package in `environment`, when it
-    /// does.
+    /// Why selfie refuses this whole package in `environment`, when it does.
     ///
-    /// `Some` carries the reason for the caller to report, and the package
-    /// deploys nothing. `None` says this file's top level and the environment's
-    /// own keys are usable; it says nothing about the individual entries, which
-    /// are refused one at a time where they are read.
+    /// `Some` carries the reason to report, and what it costs is the caller's to
+    /// decide.
+    ///
+    /// `None` says this file's top level and the environment's own keys are
+    /// usable; it says nothing about the individual entries, which are refused
+    /// one at a time where they are read.
     ///
     /// Reads only the package, so a caller that never touches the file system
     /// can ask.
-    pub(crate) fn apply_refusal(&self, environment: &str) -> Option<SpecRefusal> {
+    pub(crate) fn spec_refusal(&self, environment: &str) -> Option<SpecRefusal> {
         // Every reason here lies in the file's top level or in an environment
         // mapping, where there is no entry to attach it to -- which is why the
         // answer covers the package rather than a dotfile.
         //
-        // Ordered as apply reads a file: the top level, the environment about to
-        // be applied, then the top level it could not read back at all. Composed
+        // Ordered as a command reads a file: the top level, the environment about
+        // to be used, then the top level it could not read back at all. Composed
         // from the rules rather than from `top_level_refusal`, which would put
         // the unread top level ahead of the environment and change which reason a
         // file carrying both reports.
@@ -210,7 +210,7 @@ mod tests {
     // The rendered clause, which is what apply and drift put after their colon.
     fn reason(yaml: &str, environment: &str) -> Option<String> {
         package_from(yaml)
-            .apply_refusal(environment)
+            .spec_refusal(environment)
             .map(|refusal| refusal.to_string())
     }
 
@@ -340,7 +340,7 @@ environments:
     fn a_package_built_in_memory_is_not_refused() {
         assert!(
             Package::new_template("myapp")
-                .apply_refusal("test")
+                .spec_refusal("test")
                 .is_none()
         );
     }
@@ -361,7 +361,7 @@ environments: {}
     // workspace suite still passed while the binary refused a real one.
     #[test]
     fn a_tracked_standalone_spec_declaring_no_environment_is_not_refused() {
-        let refusal = standalone_from(TRACKED_STANDALONE).apply_refusal("work");
+        let refusal = standalone_from(TRACKED_STANDALONE).spec_refusal("work");
         assert!(
             refusal.is_none(),
             "a spec from the dotfiles directory has no environments by design, got: {}",
@@ -383,7 +383,7 @@ environments: {}
         );
 
         let refusal = package
-            .apply_refusal("work")
+            .spec_refusal("work")
             .expect("a package spec must declare an environment");
         assert!(
             refusal.to_string().contains("environment"),
@@ -405,7 +405,7 @@ environments: {}
         );
 
         let refusal = package
-            .apply_refusal("work")
+            .spec_refusal("work")
             .expect("a package spec must declare an environment")
             .to_string();
         assert!(
@@ -421,7 +421,7 @@ environments: {}
     fn an_unread_top_level_is_reported_ahead_of_a_missing_environment() {
         let yaml = format!("name: myapp\nenvironments: {{}}\n{UNREADABLE_TOP_LEVEL}");
         let refusal = package_from(&yaml)
-            .apply_refusal("work")
+            .spec_refusal("work")
             .expect("both rules apply");
         assert!(
             refusal.to_string().contains("could not be checked"),
@@ -429,7 +429,7 @@ environments: {}
         );
     }
 
-    // The order `apply_refusal` composes by hand, and the only pair that makes
+    // The order `spec_refusal` composes by hand, and the only pair that makes
     // the hand-composition observable: the two top-level rules cannot both hold
     // of one file, so an unread top level against an environment's own key is
     // where delegating to `top_level_refusal` would change the answer.
@@ -444,7 +444,7 @@ environments: {}
              ~/.config/myapp/config.toml\n"
         );
         let refusal = package_from(&yaml)
-            .apply_refusal("test")
+            .spec_refusal("test")
             .expect("both rules apply");
         assert!(
             refusal.to_string().starts_with("in environment 'test':"),
